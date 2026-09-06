@@ -41,13 +41,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     start = time.monotonic()
     logger.info("contextos.startup", version=settings.APP_VERSION, env=settings.APP_ENV)
 
-    # Initialize PostgreSQL
-    await init_db()
-    logger.info("contextos.postgres.connected")
+    # Initialize PostgreSQL (skip during tests)
+    if settings.APP_ENV != "test":
+        await init_db()
+        logger.info("contextos.postgres.connected")
 
-    # Initialize Neo4j
-    await init_graph()
-    logger.info("contextos.neo4j.connected")
+        # Initialize Neo4j (skip during tests)
+        await init_graph()
+        logger.info("contextos.neo4j.connected")
 
     elapsed = time.monotonic() - start
     logger.info("contextos.startup.complete", elapsed_ms=round(elapsed * 1000, 2))

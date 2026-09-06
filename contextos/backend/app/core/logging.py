@@ -24,7 +24,7 @@ def configure_logging() -> None:
     """
     log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
 
-    shared_processors = [
+    shared_processors: list = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
@@ -33,10 +33,26 @@ def configure_logging() -> None:
     ]
 
     if settings.LOG_FORMAT == "json":
-        processors = shared_processors + [
-            structlog.processors.dict_tracebacks,
+        final_processors = shared_processors + [
+            structlog.processors.format_exc_info,
             structlog.processors.JSONRenderer(),
         ]
+    else:
+        final_processors = shared_processors + [
+            structlog.dev.ConsoleRenderer(colors=True),
+        ]
+
+    structlog.configure(
+        processors=final_processors,
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+    # Configure standard library logging handler
+    handler = logging.StreamHandler(sys.stdout)
+    if settings.LOG_FORMAT == "json":
         formatter = structlog.stdlib.ProcessorFormatter(
             foreign_pre_chain=shared_processors,
             processors=[
@@ -45,9 +61,6 @@ def configure_logging() -> None:
             ],
         )
     else:
-        processors = shared_processors + [
-            structlog.dev.ConsoleRenderer(colors=True),
-        ]
         formatter = structlog.stdlib.ProcessorFormatter(
             foreign_pre_chain=shared_processors,
             processors=[
@@ -55,17 +68,6 @@ def configure_logging() -> None:
                 structlog.dev.ConsoleRenderer(colors=True),
             ],
         )
-
-    structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(log_level),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
-        cache_logger_on_first_use=True,
-    )
-
-    # Configure standard library logging to flow through structlog
-    handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
 
     root_logger = logging.getLogger()

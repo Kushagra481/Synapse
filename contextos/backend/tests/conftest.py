@@ -10,7 +10,7 @@ from sqlalchemy.pool import NullPool
 
 # Set up test environment variable before importing anything that uses it
 os.environ["APP_ENV"] = "test"
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://contextos:contextos_secret@localhost:5432/contextos_test"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 
 from app.main import app
 from app.core.database import get_db
@@ -18,7 +18,7 @@ from app.models.base import Base
 from app.core.config import settings
 
 # Test database URL. Should be overridden if needed.
-TEST_DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/contextos_test")
+TEST_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 
 test_engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
 TestingSessionLocal = async_sessionmaker(
