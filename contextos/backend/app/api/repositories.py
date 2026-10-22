@@ -1,49 +1,66 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.repository import Repository, IngestionStatus
-from app.schemas.repository import RepositoryCreate, RepositoryResponse, RepositoryListResponse
+from app.models.repository import Repository
+from app.schemas.repository import RepositoryCreate, RepositoryListResponse, RepositoryResponse, RepositoryUpdate
 
 router = APIRouter()
 
+
 @router.post("", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
-async def create_repository(repo_in: RepositoryCreate, db: AsyncSession = Depends(get_db)):
-    # Check if repo exists by local_path
-    result = await db.execute(select(Repository).where(Repository.local_path == repo_in.local_path))
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Repository with this local path already exists")
-        
-    repo = Repository(
-        name=repo_in.name,
-        local_path=repo_in.local_path,
-        description=repo_in.description,
-        default_branch=repo_in.default_branch,
-        language=repo_in.language
-    )
+async def create_repository(payload: RepositoryCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.scalar(select(Repository).where(Repository.local_path == payload.local_path))
+    if existing:
+        raise HTTPException(status_code=409, detail="A repository with this URL or path already exists")
+    repo = Repository(**payload.model_dump())
     db.add(repo)
     await db.commit()
     await db.refresh(repo)
     return repo
 
-@router.get("", response_model=RepositoryListResponse)
-async def list_repositories(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Repository))
-    repos = result.scalars().all()
-    return {"items": repos, "total": len(repos)}
 
-@router.post("/{repo_id}/ingest", status_code=status.HTTP_202_ACCEPTED)
-async def ingest_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
-    # This will later trigger a background task for ingestion
-    result = await db.execute(select(Repository).where(Repository.id == repo_id))
-    repo = result.scalars().first()
+@router.get("", response_model=RepositoryListResponse)
+async def list_repositories(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    limit = min(max(limit, 1), 200)
+    total = await db.scalar(select(__import__('sqlalchemy').func.count()).select_from(Repository)) or 0
+    rows = await db.scalars(select(Repository).order_by(Repository.updated_at.desc()).offset(max(skip, 0)).limit(limit))
+    return {"items": rows.all(), "total": total}
+
+
+@router.get("/{repo_id}", response_model=RepositoryResponse)
+async def get_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
+    repo = await db.get(Repository, repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
-        
-    repo.ingestion_status = IngestionStatus.RUNNING
+    return repo
+
+
+@router.patch("/{repo_id}", response_model=RepositoryResponse)
+async def update_repository(repo_id: str, payload: RepositoryUpdate, db: AsyncSession = Depends(get_db)):
+    repo = await db.get(Repository, repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(repo, key, value)
     await db.commit()
-    
-    # TODO: Trigger background ingestion here
-    
-    return {"message": "Ingestion started", "status": "running"}
+    await db.refresh(repo)
+    return repo
+
+
+@router.delete("/{repo_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
+    repo = await db.get(Repository, repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    await db.delete(repo)
+    await db.commit()
+    return None
+
+
+@router.post("/{repo_id}/ingest", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def ingest_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
+    if not await db.get(Repository, repo_id):
+        raise HTTPException(status_code=404, detail="Repository not found")
+    raise HTTPException(status_code=501, detail="Automatic source ingestion is not available yet. Context is managed through sessions, tasks, decisions, and memory.")

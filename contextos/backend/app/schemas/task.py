@@ -1,12 +1,8 @@
 """Pydantic schemas for Task API."""
-
 from __future__ import annotations
-
 from datetime import datetime
 from typing import Optional
-
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel, ConfigDict, Field
 from app.models.task import TaskStatus, TaskPriority
 
 
@@ -26,12 +22,11 @@ class TaskUpdate(BaseModel):
     priority: Optional[TaskPriority] = None
     blocked_reason: Optional[str] = None
     completion_notes: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    model_config = {"from_attributes": True}
-
     id: str
     repository_id: str
     title: str

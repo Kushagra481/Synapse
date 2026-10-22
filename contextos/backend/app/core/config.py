@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"
     ANTHROPIC_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    TYPESAFE_API_KEY: str = ""
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]

@@ -1,0 +1,49 @@
+"""MCP stdio server exposing ContextOS to coding agents."""
+from __future__ import annotations
+import os
+import httpx
+from mcp.server.fastmcp import FastMCP
+
+API = os.getenv("CONTEXTOS_API_URL", "http://127.0.0.1:8000").rstrip("/")
+mcp = FastMCP("ContextOS")
+
+
+def _request(method: str, path: str, payload: dict | None = None):
+    response = httpx.request(method, API + path, json=payload, timeout=15.0)
+    response.raise_for_status()
+    return response.json() if response.content else None
+
+
+@mcp.tool()
+def get_agent_context(repository_id: str, task: str = "", max_tokens: int = 4000) -> dict:
+    """Fetch a compact, task-specific Markdown handoff packet from ContextOS."""
+    return _request("POST", f"/repositories/{repository_id}/context", {"task": task, "max_tokens": max_tokens})
+
+
+@mcp.tool()
+def start_agent_session(repository_id: str, objective: str, provider: str = "coding-agent", model: str = "unknown", developer_name: str | None = None) -> dict:
+    """Record the start of a coding-agent work session."""
+    return _request("POST", f"/repositories/{repository_id}/sessions", {"llm_provider": provider, "llm_model": model, "developer_name": developer_name, "objective": objective, "status": "active"})
+
+
+@mcp.tool()
+def finish_agent_session(repository_id: str, session_id: str, summary: str, next_steps: list[str] | None = None, files_modified: list[str] | None = None) -> dict:
+    """Save a concise handoff summary and mark an agent session complete."""
+    return _request("PATCH", f"/repositories/{repository_id}/sessions/{session_id}", {"status": "completed", "summary": summary, "conversation_summary": summary, "next_steps": next_steps or [], "files_modified": files_modified or []})
+
+
+@mcp.tool()
+def record_project_decision(repository_id: str, title: str, decision: str, context: str = "", rationale: str = "", category: str = "other") -> dict:
+    """Store a durable decision so later agents do not repeat the discussion."""
+    return _request("POST", f"/repositories/{repository_id}/decisions", {"repository_id": repository_id, "title": title, "decision": decision, "context": context, "rationale": rationale, "status": "accepted", "category": category})
+
+
+@mcp.tool()
+def update_project_memory(repository_id: str, project_goal: str | None = None, architecture_summary: str | None = None, current_task: str | None = None, custom_notes: str | None = None) -> dict:
+    """Update persistent project memory with verified facts and agent instructions."""
+    payload = {key: value for key, value in {"project_goal": project_goal, "architecture_summary": architecture_summary, "current_task": current_task, "custom_notes": custom_notes}.items() if value is not None}
+    return _request("PATCH", f"/repositories/{repository_id}/memory", payload)
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
