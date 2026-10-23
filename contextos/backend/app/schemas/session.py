@@ -41,6 +41,14 @@ class SessionResponse(SessionBase):
     repository_id: str
     created_at: datetime
     updated_at: datetime
+    starting_branch: Optional[str] = None
+    starting_commit_sha: Optional[str] = None
+    starting_working_tree_dirty: Optional[bool] = None
+    handoff_branch: Optional[str] = None
+    handoff_commit_sha: Optional[str] = None
+    handoff_changed_files: Optional[List[Any]] = None
+    handoff_working_tree_dirty: Optional[bool] = None
+    git_snapshot_status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

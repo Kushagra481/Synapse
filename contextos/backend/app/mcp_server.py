@@ -5,11 +5,13 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 API = os.getenv("CONTEXTOS_API_URL", "http://127.0.0.1:8000").rstrip("/")
+API_TOKEN = os.getenv("CONTEXTOS_API_TOKEN", "")
 mcp = FastMCP("ContextOS")
 
 
 def _request(method: str, path: str, payload: dict | None = None):
-    response = httpx.request(method, API + path, json=payload, timeout=15.0)
+    headers = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
+    response = httpx.request(method, API + path, json=payload, headers=headers, timeout=15.0)
     response.raise_for_status()
     return response.json() if response.content else None
 
@@ -30,13 +32,15 @@ def index_repository(repository_id: str, full_reindex: bool = False) -> dict:
 
 
 @mcp.tool()
-def search_repository_code(repository_id: str, query: str, limit: int = 20) -> dict:
+def search_repository_code(repository_id: str, query: str, limit: int = 20, profile: str = "hybrid") -> dict:
     """Search the indexed symbols and source excerpts for a repository."""
     from urllib.parse import quote
 
+    if profile not in {"lexical", "hybrid", "jev"}:
+        raise ValueError("profile must be lexical, hybrid, or jev")
     return _request(
         "GET",
-        f"/repositories/{repository_id}/code/search?q={quote(query)}&limit={limit}",
+        f"/repositories/{repository_id}/code/search?q={quote(query)}&limit={limit}&profile={quote(profile)}",
     )
 
 
@@ -63,6 +67,49 @@ def update_project_memory(repository_id: str, project_goal: str | None = None, a
     """Update persistent project memory with verified facts and agent instructions."""
     payload = {key: value for key, value in {"project_goal": project_goal, "architecture_summary": architecture_summary, "current_task": current_task, "custom_notes": custom_notes}.items() if value is not None}
     return _request("PATCH", f"/repositories/{repository_id}/memory", payload)
+
+
+@mcp.tool()
+def record_memory_fact(
+    repository_id: str,
+    title: str,
+    content: str,
+    topic_key: str,
+    fact_type: str = "project",
+    source_type: str = "session",
+    source_ref: str | None = None,
+    source_file_path: str | None = None,
+    confidence: float = 0.7,
+    verified: bool = False,
+    supersedes_fact_id: str | None = None,
+) -> dict:
+    """Save a provenance-aware fact; use the stable topic key to surface conflicts."""
+    payload = {
+        "title": title,
+        "content": content,
+        "topic_key": topic_key,
+        "fact_type": fact_type,
+        "source_type": source_type,
+        "source_ref": source_ref,
+        "confidence": confidence,
+        "verified": verified,
+        "supersedes_fact_id": supersedes_fact_id,
+    }
+    if source_file_path:
+        payload["source_type"] = "repository_file"
+        payload["source_file_path"] = source_file_path
+    return _request("POST", f"/repositories/{repository_id}/memory/facts", payload)
+
+
+@mcp.tool()
+def list_memory_facts(repository_id: str, include_stale: bool = False) -> list[dict]:
+    """List current project facts, optionally including stale/conflicting history."""
+    from urllib.parse import quote
+
+    return _request(
+        "GET",
+        f"/repositories/{repository_id}/memory/facts?include_stale={quote(str(include_stale).lower())}",
+    )
 
 
 if __name__ == "__main__":

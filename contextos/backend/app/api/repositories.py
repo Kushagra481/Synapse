@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Literal
 
 from app.core.database import get_db
 from app.models.repository import Repository
@@ -12,17 +13,27 @@ from app.services.repository_index import (
     index_repository,
     search_code,
 )
-from app.models.code_index import CodeSymbol, IndexedFile, RepositoryIndexState
+from app.services.graph_index import delete_repository_graph
+from app.models.code_index import CodeImport, CodeSymbol, IndexedFile, RepositoryIndexState
+from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
 
 router = APIRouter()
 
 
 @router.post("", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
-async def create_repository(payload: RepositoryCreate, db: AsyncSession = Depends(get_db)):
-    existing = await db.scalar(select(Repository).where(Repository.local_path == payload.local_path))
+async def create_repository(
+    payload: RepositoryCreate, request: Request, db: AsyncSession = Depends(get_db)
+):
+    owner_subject = getattr(request.state, "principal", "local")
+    existing = await db.scalar(
+        select(Repository).where(
+            Repository.local_path == payload.local_path,
+            Repository.owner_subject == owner_subject,
+        )
+    )
     if existing:
         raise HTTPException(status_code=409, detail="A repository with this URL or path already exists")
-    repo = Repository(**payload.model_dump())
+    repo = Repository(**payload.model_dump(), owner_subject=owner_subject)
     db.add(repo)
     await db.commit()
     await db.refresh(repo)
@@ -30,10 +41,24 @@ async def create_repository(payload: RepositoryCreate, db: AsyncSession = Depend
 
 
 @router.get("", response_model=RepositoryListResponse)
-async def list_repositories(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def list_repositories(
+    request: Request, skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
+):
     limit = min(max(limit, 1), 200)
-    total = await db.scalar(select(__import__('sqlalchemy').func.count()).select_from(Repository)) or 0
-    rows = await db.scalars(select(Repository).order_by(Repository.updated_at.desc()).offset(max(skip, 0)).limit(limit))
+    owner_subject = getattr(request.state, "principal", "local")
+    owner_filter = Repository.owner_subject == owner_subject
+    total = await db.scalar(
+        select(__import__("sqlalchemy").func.count())
+        .select_from(Repository)
+        .where(owner_filter)
+    ) or 0
+    rows = await db.scalars(
+        select(Repository)
+        .where(owner_filter)
+        .order_by(Repository.updated_at.desc())
+        .offset(max(skip, 0))
+        .limit(limit)
+    )
     return {"items": rows.all(), "total": total}
 
 
@@ -62,8 +87,17 @@ async def delete_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
     repo = await db.get(Repository, repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
+    graph_result = await delete_repository_graph(repo_id)
+    if graph_result in {"failed", "unavailable"}:
+        raise HTTPException(
+            status_code=503,
+            detail="Repository graph could not be verified for deletion; relational records were kept.",
+        )
+    await db.execute(delete(CodeImport).where(CodeImport.repository_id == repo_id))
     await db.execute(delete(CodeSymbol).where(CodeSymbol.repository_id == repo_id))
     await db.execute(delete(IndexedFile).where(IndexedFile.repository_id == repo_id))
+    await db.execute(delete(RetrievalEvalCase).where(RetrievalEvalCase.repository_id == repo_id))
+    await db.execute(delete(RetrievalEvalRun).where(RetrievalEvalRun.repository_id == repo_id))
     index_state = await db.get(RepositoryIndexState, repo_id)
     if index_state:
         await db.delete(index_state)
@@ -108,8 +142,11 @@ async def search_repository_code(
     q: str = Query(..., min_length=2, max_length=300),
     path: str | None = Query(None, max_length=1024),
     limit: int = Query(20, ge=1, le=50),
+    profile: Literal["lexical", "hybrid", "jev"] = Query("hybrid"),
     db: AsyncSession = Depends(get_db),
 ):
     if not await db.get(Repository, repo_id):
         raise HTTPException(status_code=404, detail="Repository not found")
-    return await search_code(db, repo_id, q, limit=limit, path_filter=path)
+    return await search_code(
+        db, repo_id, q, limit=limit, path_filter=path, ranking_profile=profile
+    )

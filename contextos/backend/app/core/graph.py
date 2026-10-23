@@ -132,10 +132,22 @@ class GraphSession:
     async def execute_write(self, query: str, **params) -> list[dict]:
         """Run a write transaction."""
         async with self._driver.session(database=settings.NEO4J_DATABASE) as session:
-            result = await session.execute_write(
-                lambda tx: tx.run(query, **params)
-            )
-            return result
+            async def work(tx):
+                result = await tx.run(query, **params)
+                records = [dict(record) async for record in result]
+                return records
+
+            return await session.execute_write(work)
+
+    async def run_transaction(self, statements: list[tuple[str, dict]]) -> None:
+        """Run a group of parameterized Cypher statements atomically."""
+        async with self._driver.session(database=settings.NEO4J_DATABASE) as session:
+            async def work(tx):
+                for query, params in statements:
+                    result = await tx.run(query, **params)
+                    await result.consume()
+
+            await session.execute_write(work)
 
 
 def get_graph_session() -> GraphSession:

@@ -6,7 +6,10 @@ import Memory from './components/Memory'
 import Decisions from './components/Decisions'
 import Sessions from './components/Sessions'
 import Context from './components/Context'
+import Evaluations from './components/Evaluations'
+import Audit from './components/Audit'
 import Toast from './components/Toast'
+import Login from './components/Login'
 import { useToast } from './utils'
 
 const navigation = [
@@ -16,16 +19,44 @@ const navigation = [
   { id: 'decisions', icon: '◇', label: 'Decisions' },
   { id: 'sessions', icon: '◷', label: 'Agent sessions' },
   { id: 'context', icon: '↗', label: 'Agent handoff' },
+  { id: 'evaluations', icon: '◎', label: 'Evaluations' },
+  { id: 'audit', icon: '⌁', label: 'Audit trail' },
 ]
 
 export default function App() {
   const [repo, setRepo] = useState(null)
   const [page, setPage] = useState('repositories')
   const [health, setHealth] = useState('checking')
+  const [authReady, setAuthReady] = useState(false)
+  const [authEnabled, setAuthEnabled] = useState(false)
+  const [authConfigured, setAuthConfigured] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
   const { toasts, addToast } = useToast()
 
-  useEffect(() => { api.health().then(() => setHealth('online')).catch(() => setHealth('offline')) }, [])
+  useEffect(() => {
+    const unauthorized = () => setAuthenticated(false)
+    window.addEventListener('contextos:unauthorized', unauthorized)
+    Promise.all([api.auth.status(), api.health()])
+      .then(([authStatus]) => {
+        setAuthEnabled(authStatus.enabled)
+        setAuthConfigured(authStatus.configured)
+        setAuthenticated(!authStatus.enabled || Boolean(api.auth.token()))
+        setHealth('online')
+      })
+      .catch(() => {
+        setHealth('offline')
+        setAuthenticated(true)
+      })
+      .finally(() => setAuthReady(true))
+    return () => window.removeEventListener('contextos:unauthorized', unauthorized)
+  }, [])
   const selectRepo = value => { setRepo(value); setPage('overview') }
+  const signOut = () => { api.auth.logout(); setAuthenticated(false); setRepo(null); setPage('repositories') }
+
+  if (!authReady) return <div className="loading-wrap" style={{ minHeight: '100vh' }}><div className="spinner" /></div>
+  if (authEnabled && !authenticated) {
+    return <Login configured={authConfigured} onLogin={() => setAuthenticated(true)} />
+  }
 
   const renderPage = () => {
     if (page === 'repositories') return <Repositories onSelect={selectRepo} />
@@ -36,6 +67,8 @@ export default function App() {
     if (page === 'decisions') return <Decisions key={repo.id} repo={repo} addToast={addToast} />
     if (page === 'sessions') return <Sessions key={repo.id} repo={repo} addToast={addToast} />
     if (page === 'context') return <Context key={repo.id} repo={repo} addToast={addToast} />
+    if (page === 'evaluations') return <Evaluations key={repo.id} repo={repo} addToast={addToast} />
+    if (page === 'audit') return <Audit key={repo.id} repo={repo} addToast={addToast} />
     return null
   }
 
@@ -53,7 +86,7 @@ export default function App() {
       <div className="sidebar-footer"><span className={'status-dot ' + (health === 'online' ? 'active' : health === 'offline' ? 'inactive' : 'idle')} /><div className="user-info"><div className="user-name">API {health}</div><div className="user-role">Local workspace</div></div></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div><div className="topbar-title">{repo?.name || 'Repositories'}</div><div className="topbar-sub">{repo ? repo.local_path : 'Persistent memory for coding agents'}</div></div><div className="topbar-actions">{repo && <button className="btn btn-ghost btn-sm" onClick={() => setRepo(null)}>Switch repository</button>}</div></header>
+       <header className="topbar"><div><div className="topbar-title">{repo?.name || 'Repositories'}</div><div className="topbar-sub">{repo ? repo.local_path : 'Persistent memory for coding agents'}</div></div><div className="topbar-actions">{repo && <button className="btn btn-ghost btn-sm" onClick={() => setRepo(null)}>Switch repository</button>}{authEnabled && <button className="btn btn-ghost btn-sm" onClick={signOut}>Sign out</button>}</div></header>
       <section className="content">{renderPage()}</section>
     </main>
     <Toast toasts={toasts} />

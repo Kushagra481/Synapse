@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_DEBUG: bool = False
     SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
+    AUTH_ENABLED: bool = True
+    AUTH_USERNAME: str = ""
+    AUTH_PASSWORD_HASH: str = ""
+    AUTH_TOKEN_TTL_SECONDS: int = 28800
 
     # ── PostgreSQL ────────────────────────────────────────────────────────────
     DATABASE_URL: str = Field(
@@ -55,8 +59,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
+    EMBEDDINGS_ALLOW_SOURCE_UPLOAD: bool = False
+    EMBEDDING_BATCH_SIZE: int = 64
+    MAX_EMBEDDINGS_PER_INDEX: int = 1000
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    GRAPH_SYNC_ENABLED: bool = True
 
     # ── LLM ──────────────────────────────────────────────────────────────────
     LLM_PROVIDER: str = "openai"          # openai | anthropic | gemini | ollama
@@ -64,6 +72,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     TYPESAFE_API_KEY: str = ""
+    JEV_ALLOW_SOURCE_UPLOAD: bool = False
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]

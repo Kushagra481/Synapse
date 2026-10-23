@@ -27,6 +27,7 @@ class Repository(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "repositories"
 
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner_subject: Mapped[str] = mapped_column(String(255), default="local", nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     local_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     default_branch: Mapped[str] = mapped_column(String(255), default="main", nullable=False)

@@ -31,6 +31,8 @@ async def init_db() -> None:
     _session_factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False, autocommit=False)
     async with _engine.begin() as conn:
         await conn.execute(text("SELECT version()"))
+        if conn.dialect.name == "postgresql":
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         # Bootstrap the first-run schema. Use Alembic revisions for future changes.
         await conn.run_sync(Base.metadata.create_all)
     logger.info("contextos.postgres.schema_ready")

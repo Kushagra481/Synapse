@@ -9,6 +9,7 @@ export default function Context({ repo, addToast }) {
   const [index, setIndex] = useState(null)
   const [indexing, setIndexing] = useState(false)
   const [query, setQuery] = useState('')
+  const [searchProfile, setSearchProfile] = useState('hybrid')
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching] = useState(false)
 
@@ -42,7 +43,7 @@ export default function Context({ repo, addToast }) {
     if (query.trim().length < 2) return addToast('Enter at least two characters to search', 'error')
     setSearching(true)
     try {
-      setSearchResults(await api.repos.search(repo.id, query.trim()))
+      setSearchResults(await api.repos.search(repo.id, query.trim(), 20, searchProfile))
     } catch (error) {
       addToast(error.message, 'error')
     } finally {
@@ -93,7 +94,7 @@ export default function Context({ repo, addToast }) {
           <h2 style={{ fontSize: 16 }}>Code index</h2>
           <p className="page-subtitle">
             {index?.file_count
-              ? `${index.file_count} files · ${index.symbol_count} symbols · ${index.ingestion_status}`
+              ? `${index.file_count} files · ${index.symbol_count} symbols · ${index.import_count || 0} imports · ${index.ingestion_status}`
               : `Index status: ${index?.ingestion_status || 'checking…'}`}
           </p>
         </div>
@@ -107,6 +108,7 @@ export default function Context({ repo, addToast }) {
         </div>
       </div>
       {index?.indexed_commit_sha && <p className="text-muted">Indexed commit: <span className="monospace">{index.indexed_commit_sha.slice(0, 12)}</span> · {index.indexed_at ? new Date(index.indexed_at).toLocaleString() : ''}</p>}
+      {index && <p className="text-muted" style={{ marginTop: 6 }}>Embeddings: {index.embedding_status || 'not configured'} ({index.embedding_count || 0}) · Graph sync: {index.graph_sync_status || 'pending'}</p>}
       {index?.working_tree_dirty && <p className="text-muted" style={{ color: 'var(--accent-amber)', marginTop: 6 }}>The working tree had local changes when this snapshot was indexed.</p>}
       {index?.skipped_count > 0 && <p className="text-muted" style={{ marginTop: 6 }}>{index.skipped_count} files were skipped by safety, size, binary, or ignore rules.</p>}
       {index?.ingestion_error && <p className="text-muted" style={{ color: 'var(--accent-red)', marginTop: 6 }}>{index.ingestion_error}</p>}
@@ -124,12 +126,18 @@ export default function Context({ repo, addToast }) {
           onChange={event => setQuery(event.target.value)}
           onKeyDown={event => event.key === 'Enter' && search()}
         />
+        <select className="form-input" aria-label="Retrieval profile" value={searchProfile} onChange={event => setSearchProfile(event.target.value)} style={{ width: 170 }}>
+          <option value="hybrid">Hybrid retrieval</option>
+          <option value="lexical">Lexical baseline</option>
+          <option value="jev">Jev rerank (opt-in)</option>
+        </select>
         <button className="btn btn-ghost" onClick={search} disabled={searching}>
           {searching ? 'Searching…' : 'Search'}
         </button>
       </div>
+      {searchProfile === 'jev' && <p className="text-muted" style={{ marginTop: 8 }}>Jev sends bounded candidate snippets to TypeSafe only if the backend explicitly enables JEV_ALLOW_SOURCE_UPLOAD; otherwise search falls back to local ranking.</p>}
       {searchResults && <div style={{ marginTop: 16 }}>
-        <p className="text-muted" style={{ marginBottom: 10 }}>{searchResults.total} matching symbols or chunks</p>
+        <p className="text-muted" style={{ marginBottom: 10 }}>{searchResults.total} matching symbols · {searchResults.retrieval?.profile || searchProfile}{searchResults.retrieval?.requested_profile === 'jev' ? ` (${searchResults.retrieval.jev_status})` : ''} · {searchResults.retrieval?.latency_ms?.toFixed(1)} ms</p>
         {searchResults.results.length === 0
           ? <p className="text-muted">No code matched. Index the repository or try different terms.</p>
           : searchResults.results.map((item, position) => <article className="card" key={`${item.file_path}:${item.start_line}:${position}`} style={{ padding: 14, marginBottom: 10 }}>
@@ -137,6 +145,7 @@ export default function Context({ repo, addToast }) {
               <div>
                 <strong>{item.qualified_name}</strong>
                 <p className="text-muted monospace">{item.file_path}:{item.start_line}-{item.end_line}</p>
+                <p className="text-muted" style={{ marginTop: 4 }}>Freshness: {item.freshness} · {Object.keys(item.ranking_signals || {}).join(' + ') || 'lexical signal'}</p>
               </div>
               <span className="badge badge-accepted">{item.relevance_score.toFixed(2)}</span>
             </div>
@@ -169,7 +178,7 @@ export default function Context({ repo, addToast }) {
         </div>
       </div>
       <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 560, overflow: 'auto', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 18, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.65, color: 'var(--text-secondary)' }}>{result.text}</pre>
-      <p className="text-muted" style={{ marginTop: 10 }}>Token count is an estimate, not a model-specific tokenizer count. Saved memory summaries may be sent to Jev when configured; repository source is scored locally and is not sent to Jev.</p>
+      <p className="text-muted" style={{ marginTop: 10 }}>Token count is an estimate, not a model-specific tokenizer count. Saved memory summaries may be sent to Jev when configured. Code is scored locally by default; Jev code reranking and source embeddings each require separate server-side opt-in because they send bounded source snippets to external providers.</p>
     </section>}
   </>
 }
