@@ -58,6 +58,8 @@ async def test_benchmark_compares_profiles_and_persists_metrics(
     assert result["metrics"]["lexical"]["recall_at_k"] == 1.0
     assert result["metrics"]["hybrid"]["recall_at_k"] == 1.0
     assert result["metrics"]["hybrid"]["mrr"] == 1.0
+    assert 0.0 <= result["metrics"]["hybrid"]["recall_at_k"] <= 1.0
+    assert 0.0 <= result["metrics"]["hybrid"]["ndcg_at_k"] <= 1.0
     assert result["metrics"]["jev"]["jev_used"] == 0.0
     jev_case = next(row for row in result["case_results"] if row["profile"] == "jev")
     assert jev_case["retrieval"]["jev_status"] == "disabled_by_policy"

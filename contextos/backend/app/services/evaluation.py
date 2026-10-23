@@ -20,25 +20,36 @@ def _normalized(values: list[str]) -> set[str]:
 def _case_metrics(case: RetrievalEvalCase, results: list[dict[str, Any]], top_k: int) -> dict[str, float]:
     expected_files = _normalized(case.expected_files)
     expected_symbols = _normalized(case.expected_symbols)
-    relevant: list[bool] = []
+    relevant: list[int] = []
+    matched_files: set[str] = set()
+    matched_symbols: set[str] = set()
     for result in results[:top_k]:
         file_path = str(result.get("file_path", "")).lower().replace("\\", "/")
         symbol = str(result.get("symbol", "")).lower()
         qualified = str(result.get("qualified_name", "")).lower()
-        relevant.append(
-            file_path in expected_files
-            or symbol in expected_symbols
-            or qualified in expected_symbols
-        )
-    expected_count = max(len(expected_files), len(expected_symbols))
-    relevant_count = sum(relevant)
+        file_hits = {target for target in expected_files if target == file_path}
+        symbol_hits = {
+            target for target in expected_symbols if target in {symbol, qualified}
+        }
+        matched_files.update(file_hits)
+        matched_symbols.update(symbol_hits)
+        relevant.append(2 if symbol_hits else 1 if file_hits else 0)
+    expected_count = len(expected_files) + len(expected_symbols)
+    relevant_count = sum(grade > 0 for grade in relevant)
     reciprocal_rank = next(
-        (1.0 / rank for rank, is_relevant in enumerate(relevant, start=1) if is_relevant),
+        (1.0 / rank for rank, grade in enumerate(relevant, start=1) if grade > 0),
         0.0,
     )
-    dcg = sum(1.0 / math.log2(rank + 1) for rank, hit in enumerate(relevant, start=1) if hit)
-    ideal_count = min(expected_count, top_k)
-    idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_count + 1))
+    dcg = sum(
+        (2**grade - 1) / math.log2(rank + 1)
+        for rank, grade in enumerate(relevant, start=1)
+        if grade > 0
+    )
+    ideal_grades = ([2] * len(expected_symbols) + [1] * len(expected_files))[:top_k]
+    idcg = sum(
+        (2**grade - 1) / math.log2(rank + 1)
+        for rank, grade in enumerate(ideal_grades, start=1)
+    )
     has_provenance = sum(
         bool(row.get("file_path") and row.get("start_line") and row.get("end_line"))
         for row in results[:top_k]
@@ -49,15 +60,17 @@ def _case_metrics(case: RetrievalEvalCase, results: list[dict[str, Any]], top_k:
     )
     return {
         "precision_at_k": relevant_count / top_k,
-        "recall_at_k": relevant_count / expected_count if expected_count else 0.0,
+        "recall_at_k": (
+            (len(matched_files) + len(matched_symbols)) / expected_count
+            if expected_count
+            else 0.0
+        ),
         "mrr": reciprocal_rank,
         "ndcg_at_k": dcg / idcg if idcg else 0.0,
-        "correct_file": float(any(row.get("file_path", "").lower().replace("\\", "/") in expected_files for row in results[:top_k])),
-        "correct_symbol": float(any(
-            row.get("symbol", "").lower() in expected_symbols
-            or row.get("qualified_name", "").lower() in expected_symbols
-            for row in results[:top_k]
-        )),
+        "correct_file": len(matched_files) / len(expected_files) if expected_files else 0.0,
+        "correct_symbol": (
+            len(matched_symbols) / len(expected_symbols) if expected_symbols else 0.0
+        ),
         "provenance_coverage": has_provenance / top_k,
         "freshness_coverage": verified_freshness / top_k,
         "jev_used": 0.0,
