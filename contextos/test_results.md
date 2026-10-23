@@ -1,19 +1,20 @@
 # ContextOS test and benchmark results
 
-- Generated: 2026-10-23T09:26:18+00:00
-- Benchmark fixture commit: `60c92fb4bc997956b6ee70540458123274702788`
+- Generated: 2026-10-23T09:35:06+00:00
+- Benchmark fixture commit: `f7c7648ab87b60a63e60c6aed2f094e8ef6e9c64`
 - Runtime: Python 3.11.17, SQLite in-memory database
 - Dataset: 5 hand-authored queries over 5 small Python source files (synthetic fixture, not a production corpus)
 - External services: TypeSafe/Jev disabled; embeddings and Neo4j disabled; no source was sent externally
 - Token accounting: estimates from source-text length, not a model tokenizer or billing measure
-- Resume benchmark mode: deterministic fresh-consumer simulation; no LLM or code-writing agent is invoked
+- Resume benchmark mode: deterministic_simulation; raw runner output and command are not written to this report
 
 ## Verification performed
 
 - Backend Docker image build: passed
-- pytest -q: 32 passed in 4.00 seconds (SQLite and temporary Git fixtures)
+- pytest -q: 34 passed in 4.49 seconds (SQLite, local fixtures, and stub agent adapter)
 - MCP server import: passed
 - npm run build: passed (Vite production build)
+- Benchmark CLI help: passed
 - Alembic upgrade head from legacy-shaped SQLite schema: passed
 - alembic check: no new upgrade operations detected
 
@@ -21,9 +22,9 @@
 
 | Profile | P@5 | Recall@5 | MRR | nDCG@5 | Correct file | Correct symbol | Provenance | Freshness | Jev used | Avg estimated tokens | Avg search latency (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| lexical | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 16.30 |
-| hybrid | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 15.50 |
-| jev | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 13.87 |
+| lexical | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 14.86 |
+| hybrid | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 14.30 |
+| jev | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 14.20 |
 
 ## Per-case retrieval
 
@@ -45,35 +46,36 @@
 | symbol search | hybrid | 1 | src/search.py | 16 | not_requested |
 | symbol search | jev | 1 | src/search.py | 16 | disabled_by_policy |
 
-## Fresh-agent resume simulation
+## Fresh-agent resume evaluation
 
-A clean consumer receives only the incoming task and the generated handoff packet; it does not receive the saved database records or prior conversation. In this offline benchmark, a resume counts as successful only when the packet contains the case's required decision/continuity markers, target path, and next action. This measures handoff sufficiency, not an LLM's ability to make code changes or pass tests.
+Each fresh consumer receives only the incoming task and generated handoff packet; it does not receive saved database records or the prior conversation. Resume success requires recovery of task state, recorded decisions, changed/target files, and next actions. The default deterministic mode checks packet sufficiency only. An optional command adapter accepts a model/agent runner that reads the JSON input contract and returns structured fields; this evaluates actual agent recall but still does not execute code changes or tests.
 
-| Handoff budget (tokens) | Resume checks passed | Success rate | Required-context coverage | Avg estimated packet tokens |
-|---:|---:|---:|---:|---:|
-| 128 | 0/3 | 0.000 | 0.000 | 119.0 |
-| 512 | 3/3 | 1.000 | 1.000 | 445.7 |
-| 1200 | 3/3 | 1.000 | 1.000 | 484.3 |
+| Handoff budget (tokens) | Resume checks passed | Success rate | Required-context coverage | Avg packet tokens | Avg agent runtime (ms) |
+|---:|---:|---:|---:|---:|---:|
+| 128 | 0/3 | 0.000 | 0.000 | 119.0 | — |
+| 512 | 3/3 | 1.000 | 1.000 | 445.7 | — |
+| 1200 | 3/3 | 1.000 | 1.000 | 484.3 | — |
 
-| Case | Budget | Context items recovered | Coverage | Resume check |
-|---|---:|---:|---:|---|
-| access-token expiry | 128 | 0/5 | 0.000 | incomplete |
-| access-token expiry | 512 | 5/5 | 1.000 | pass |
-| access-token expiry | 1200 | 5/5 | 1.000 | pass |
-| index rollback safety | 128 | 0/5 | 0.000 | incomplete |
-| index rollback safety | 512 | 5/5 | 1.000 | pass |
-| index rollback safety | 1200 | 5/5 | 1.000 | pass |
-| private-source policy | 128 | 0/5 | 0.000 | incomplete |
-| private-source policy | 512 | 5/5 | 1.000 | pass |
-| private-source policy | 1200 | 5/5 | 1.000 | pass |
+| Case | Budget | Context items recovered | Coverage | Resume check | Agent status |
+|---|---:|---:|---:|---|---|
+| access-token expiry | 128 | 0/6 | 0.000 | incomplete | simulation |
+| access-token expiry | 512 | 6/6 | 1.000 | pass | simulation |
+| access-token expiry | 1200 | 6/6 | 1.000 | pass | simulation |
+| index rollback safety | 128 | 0/6 | 0.000 | incomplete | simulation |
+| index rollback safety | 512 | 6/6 | 1.000 | pass | simulation |
+| index rollback safety | 1200 | 6/6 | 1.000 | pass | simulation |
+| private-source policy | 128 | 0/6 | 0.000 | incomplete | simulation |
+| private-source policy | 512 | 6/6 | 1.000 | pass | simulation |
+| private-source policy | 1200 | 6/6 | 1.000 | pass | simulation |
 
 - Task-only baseline (no handoff packet): 0.000 required-context coverage; 0/3 complete resume checks.
-- No actual agent/model was invoked. Treat this as a deterministic test of saved-context retrieval and packet budgets, not as measured coding-agent completion accuracy.
+- No external agent command was configured. Treat this as deterministic saved-context recovery, not model-based coding-agent accuracy.
+- Configuring a real runner requires both --agent-command and --allow-agent-command. The command receives only JSON task/context input and inherits this process's environment for its own runtime credentials.
 
 ## Interpretation
 
 These results establish that indexing, retrieval evaluation, and task-specific context packing run end to end on reproducible local fixtures. They are not evidence of performance on a large or representative customer repository. The Jev row is a local hybrid fallback because the external scorer is intentionally disabled. Latency is a small SQLite-fixture measurement and is not comparable to production PostgreSQL/Neo4j latency.
 
 - Cases: 5; top-k: 5; profiles: lexical, hybrid, jev.
-- Benchmark run total: 230.30 ms across all cases and profiles.
+- Benchmark run total: 218.62 ms across all cases and profiles.
 - Total estimated retrieved source tokens: 840.
