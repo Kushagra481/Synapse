@@ -12,6 +12,7 @@ from app.models.code_index import IndexedFile, RepositoryIndexState
 from app.schemas.memory_fact import MemoryFactCreate, MemoryFactCreateResponse, MemoryFactResponse
 
 router = APIRouter()
+from app.api.dependencies import require_repository_editor
 
 
 async def _repo(db: AsyncSession, repo_id: str):
@@ -24,14 +25,16 @@ async def get_memory(repo_id: str, db: AsyncSession = Depends(get_db)):
     await _repo(db, repo_id)
     memory = await db.scalar(select(ProjectMemory).where(ProjectMemory.repository_id == repo_id))
     if not memory:
-        memory = ProjectMemory(repository_id=repo_id)
-        db.add(memory)
-        await db.commit()
-        await db.refresh(memory)
+        return ProjectMemoryResponse(repository_id=repo_id)
     return memory
 
 
-@router.post("/{repo_id}/memory", response_model=ProjectMemoryResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/{repo_id}/memory",
+    response_model=ProjectMemoryResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def upsert_memory(repo_id: str, payload: ProjectMemoryCreate, db: AsyncSession = Depends(get_db)):
     await _repo(db, repo_id)
     memory = await db.scalar(select(ProjectMemory).where(ProjectMemory.repository_id == repo_id))
@@ -47,7 +50,11 @@ async def upsert_memory(repo_id: str, payload: ProjectMemoryCreate, db: AsyncSes
     return memory
 
 
-@router.patch("/{repo_id}/memory", response_model=ProjectMemoryResponse)
+@router.patch(
+    "/{repo_id}/memory",
+    response_model=ProjectMemoryResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_memory(repo_id: str, payload: ProjectMemoryUpdate, db: AsyncSession = Depends(get_db)):
     await _repo(db, repo_id)
     memory = await db.scalar(select(ProjectMemory).where(ProjectMemory.repository_id == repo_id))
@@ -70,7 +77,12 @@ async def list_bugs(repo_id: str, skip: int = 0, limit: int = 100, db: AsyncSess
     return {"items": rows.all(), "total": total}
 
 
-@router.post("/{repo_id}/bugs", response_model=BugResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{repo_id}/bugs",
+    response_model=BugResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def create_bug(repo_id: str, payload: BugCreate, db: AsyncSession = Depends(get_db)):
     await _repo(db, repo_id)
     bug = Bug(repository_id=repo_id, **payload.model_dump(exclude={"repository_id"}))
@@ -80,7 +92,11 @@ async def create_bug(repo_id: str, payload: BugCreate, db: AsyncSession = Depend
     return bug
 
 
-@router.patch("/{repo_id}/bugs/{bug_id}", response_model=BugResponse)
+@router.patch(
+    "/{repo_id}/bugs/{bug_id}",
+    response_model=BugResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_bug(repo_id: str, bug_id: str, payload: BugUpdate, db: AsyncSession = Depends(get_db)):
     bug = await db.get(Bug, bug_id)
     if not bug or bug.repository_id != repo_id:
@@ -92,7 +108,11 @@ async def update_bug(repo_id: str, bug_id: str, payload: BugUpdate, db: AsyncSes
     return bug
 
 
-@router.delete("/{repo_id}/bugs/{bug_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}/bugs/{bug_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def delete_bug(repo_id: str, bug_id: str, db: AsyncSession = Depends(get_db)):
     bug = await db.get(Bug, bug_id)
     if not bug or bug.repository_id != repo_id:
@@ -145,6 +165,7 @@ async def list_memory_facts(
     "/{repo_id}/memory/facts",
     response_model=MemoryFactCreateResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
 )
 async def create_memory_fact(
     repo_id: str, payload: MemoryFactCreate, db: AsyncSession = Depends(get_db)
@@ -247,7 +268,11 @@ async def create_memory_fact(
     return {"fact": fact, "conflicts": conflict_ids}
 
 
-@router.delete("/{repo_id}/memory/facts/{fact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}/memory/facts/{fact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def soft_delete_memory_fact(
     repo_id: str, fact_id: str, db: AsyncSession = Depends(get_db)
 ):

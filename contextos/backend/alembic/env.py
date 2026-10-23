@@ -35,6 +35,7 @@ from app.models.code_index import IndexedFile, CodeSymbol, RepositoryIndexState
 from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
 from app.models.memory_fact import ProjectMemoryFact
 from app.models.audit import AuditEvent
+from app.models.membership import ProjectMembership
 
 target_metadata = Base.metadata
 

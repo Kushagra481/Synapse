@@ -85,6 +85,12 @@ export const api = {
     getRun: (repoId, runId) => req('GET', '/repositories/' + repoId + '/evaluations/runs/' + runId),
   },
   audit: { list: (repoId, params = '') => req('GET', '/repositories/' + repoId + '/audit-events' + params) },
+  members: {
+    list: repoId => req('GET', '/repositories/' + repoId + '/members'),
+    add: (repoId, data) => req('POST', '/repositories/' + repoId + '/members', data),
+    update: (repoId, username, data) => req('PATCH', '/repositories/' + repoId + '/members/' + encodeURIComponent(username), data),
+    remove: (repoId, username) => req('DELETE', '/repositories/' + repoId + '/members/' + encodeURIComponent(username)),
+  },
   context: (repoId, data) => req('POST', '/repositories/' + repoId + '/context', data),
   health: () => req('GET', '/api/health'),
 }

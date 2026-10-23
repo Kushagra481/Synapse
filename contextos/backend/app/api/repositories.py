@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Literal
 
@@ -16,6 +16,8 @@ from app.services.repository_index import (
 from app.services.graph_index import delete_repository_graph
 from app.models.code_index import CodeImport, CodeSymbol, IndexedFile, RepositoryIndexState
 from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
+from app.models.membership import ProjectMembership
+from app.api.dependencies import require_repository_editor, require_repository_owner
 
 router = APIRouter()
 
@@ -35,6 +37,14 @@ async def create_repository(
         raise HTTPException(status_code=409, detail="A repository with this URL or path already exists")
     repo = Repository(**payload.model_dump(), owner_subject=owner_subject)
     db.add(repo)
+    await db.flush()
+    db.add(
+        ProjectMembership(
+            repository_id=repo.id,
+            user_subject=owner_subject,
+            role="owner",
+        )
+    )
     await db.commit()
     await db.refresh(repo)
     return repo
@@ -46,7 +56,13 @@ async def list_repositories(
 ):
     limit = min(max(limit, 1), 200)
     owner_subject = getattr(request.state, "principal", "local")
-    owner_filter = Repository.owner_subject == owner_subject
+    membership_repositories = select(ProjectMembership.repository_id).where(
+        ProjectMembership.user_subject == owner_subject
+    )
+    owner_filter = or_(
+        Repository.owner_subject == owner_subject,
+        Repository.id.in_(membership_repositories),
+    )
     total = await db.scalar(
         select(__import__("sqlalchemy").func.count())
         .select_from(Repository)
@@ -70,7 +86,11 @@ async def get_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
     return repo
 
 
-@router.patch("/{repo_id}", response_model=RepositoryResponse)
+@router.patch(
+    "/{repo_id}",
+    response_model=RepositoryResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_repository(repo_id: str, payload: RepositoryUpdate, db: AsyncSession = Depends(get_db)):
     repo = await db.get(Repository, repo_id)
     if not repo:
@@ -82,7 +102,11 @@ async def update_repository(repo_id: str, payload: RepositoryUpdate, db: AsyncSe
     return repo
 
 
-@router.delete("/{repo_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_owner)],
+)
 async def delete_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
     repo = await db.get(Repository, repo_id)
     if not repo:
@@ -98,6 +122,9 @@ async def delete_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(delete(IndexedFile).where(IndexedFile.repository_id == repo_id))
     await db.execute(delete(RetrievalEvalCase).where(RetrievalEvalCase.repository_id == repo_id))
     await db.execute(delete(RetrievalEvalRun).where(RetrievalEvalRun.repository_id == repo_id))
+    await db.execute(
+        delete(ProjectMembership).where(ProjectMembership.repository_id == repo_id)
+    )
     index_state = await db.get(RepositoryIndexState, repo_id)
     if index_state:
         await db.delete(index_state)
@@ -106,7 +133,11 @@ async def delete_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
     return None
 
 
-@router.post("/{repo_id}/ingest", response_model=IngestionResponse)
+@router.post(
+    "/{repo_id}/ingest",
+    response_model=IngestionResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def ingest_repository(
     repo_id: str,
     full_reindex: bool = Query(False, description="Re-parse every eligible file, even when its hash is unchanged."),

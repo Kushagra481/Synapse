@@ -26,10 +26,10 @@ class ProjectMemoryUpdate(ProjectMemoryBase):
     pass
 
 class ProjectMemoryResponse(ProjectMemoryBase):
-    id: str
+    id: Optional[str] = None
     repository_id: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

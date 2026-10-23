@@ -14,7 +14,7 @@ const metrics = [
 const labels = value => value.split(/\n|,/).map(item => item.trim()).filter(Boolean)
 const percent = value => `${Math.round((value || 0) * 100)}%`
 
-export default function Evaluations({ repo, addToast }) {
+export default function Evaluations({ repo, addToast, canEdit = false }) {
   const [cases, setCases] = useState([])
   const [runs, setRuns] = useState([])
   const [latest, setLatest] = useState(null)
@@ -96,7 +96,7 @@ export default function Evaluations({ repo, addToast }) {
         <p className="page-subtitle">Save real repository questions and compare hybrid retrieval with a lexical baseline.</p>
       </div>
     </div>
-    <div className="page-header-actions" style={{ justifyContent: 'flex-end', marginBottom: 16 }}>
+    {canEdit && <div className="page-header-actions" style={{ justifyContent: 'flex-end', marginBottom: 16 }}>
       <label className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <input type="checkbox" checked={includeJev} onChange={event => setIncludeJev(event.target.checked)} />
         Include Jev reranking
@@ -104,7 +104,7 @@ export default function Evaluations({ repo, addToast }) {
       <button className="btn btn-primary" onClick={run} disabled={running || cases.length === 0}>
         {running ? 'Running…' : 'Run benchmark'}
       </button>
-    </div>
+    </div>}
     {includeJev && <p className="text-muted" style={{ margin: '-8px 0 16px', textAlign: 'right' }}>Jev reranking sends code snippets to TypeSafe only when JEV_ALLOW_SOURCE_UPLOAD=true and a key is configured; otherwise it records a local fallback.</p>}
 
     <div className="card" style={{ padding: 20, marginBottom: 18 }}>
@@ -114,7 +114,7 @@ export default function Evaluations({ repo, addToast }) {
       </p>
     </div>
 
-    <section className="card" style={{ padding: 20, marginBottom: 18 }}>
+    {canEdit && <section className="card" style={{ padding: 20, marginBottom: 18 }}>
       <h2 style={{ fontSize: 16, marginBottom: 14 }}>Add a benchmark case</h2>
       <form onSubmit={createCase}>
         <div className="form-group">
@@ -137,7 +137,7 @@ export default function Evaluations({ repo, addToast }) {
         </div>
         <button className="btn btn-ghost" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save case'}</button>
       </form>
-    </section>
+    </section>}
 
     {loading ? <div className="loading-wrap"><div className="spinner" /></div> : <section className="card" style={{ padding: 20, marginBottom: 18 }}>
       <div className="page-header" style={{ marginBottom: 14 }}>
@@ -146,7 +146,7 @@ export default function Evaluations({ repo, addToast }) {
       {!cases.length ? <p className="text-muted">No cases yet. Add a few questions with expected file paths or symbol names, then run the benchmark.</p> :
         <div style={{ display: 'grid', gap: 9 }}>{cases.map(item => <div key={item.id} className="card" style={{ padding: 13, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 }}>
           <div><strong>{item.name}</strong><p className="text-muted" style={{ marginTop: 4 }}>{item.query}</p><p className="text-muted monospace" style={{ marginTop: 5 }}>{[...item.expected_files, ...item.expected_symbols].join(' · ')}</p></div>
-          <button className="btn btn-danger btn-sm" onClick={() => deleteCase(item)} aria-label={`Delete ${item.name}`}>Remove</button>
+           {canEdit && <button className="btn btn-danger btn-sm" onClick={() => deleteCase(item)} aria-label={`Delete ${item.name}`}>Remove</button>}
         </div>)}</div>}
     </section>}
 

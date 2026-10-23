@@ -1,7 +1,9 @@
-"""Single-operator signed bearer authentication.
+"""Signed bearer authentication for configured workspace users.
 
-The configured password is stored as a scrypt verifier, never as plaintext.
-Tokens are short-lived and signed with the deployment SECRET_KEY.
+Passwords are stored as scrypt verifiers, never as plaintext. Tokens are
+short-lived and signed with the deployment SECRET_KEY. AUTH_USERS_JSON is an
+optional username-to-verifier map; the legacy single-user settings remain
+supported for existing deployments.
 """
 from __future__ import annotations
 
@@ -23,11 +25,10 @@ def _unb64(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
-def auth_is_configured() -> bool:
-    secret = settings.SECRET_KEY.encode("utf-8")
+def _valid_password_verifier(encoded: str) -> bool:
     try:
-        algorithm, n_raw, r_raw, p_raw, salt_raw, digest_raw = settings.AUTH_PASSWORD_HASH.split("$", 5)
-        password_hash_valid = (
+        algorithm, n_raw, r_raw, p_raw, salt_raw, digest_raw = encoded.split("$", 5)
+        return (
             algorithm == "scrypt"
             and 2**14 <= int(n_raw) <= 2**18
             and int(r_raw) == 8
@@ -36,10 +37,46 @@ def auth_is_configured() -> bool:
             and len(_unb64(digest_raw)) >= 32
         )
     except (ValueError, TypeError):
-        password_hash_valid = False
+        return False
+
+
+def configured_users() -> dict[str, str]:
+    """Return configured usernames and scrypt verifiers, or an empty map if invalid."""
+    raw = settings.AUTH_USERS_JSON.strip()
+    if raw:
+        if len(raw) > 65536:
+            return {}
+        try:
+            value = json.loads(raw)
+        except (ValueError, TypeError):
+            return {}
+        if not isinstance(value, dict) or not 1 <= len(value) <= 100:
+            return {}
+        users: dict[str, str] = {}
+        for username, verifier in value.items():
+            if (
+                not isinstance(username, str)
+                or not username
+                or username != username.strip()
+                or len(username) > 255
+                or not isinstance(verifier, str)
+                or not _valid_password_verifier(verifier)
+            ):
+                return {}
+            users[username] = verifier
+        return users
+
+    username = settings.AUTH_USERNAME
+    verifier = settings.AUTH_PASSWORD_HASH
+    if username.strip() and _valid_password_verifier(verifier):
+        return {username: verifier}
+    return {}
+
+
+def auth_is_configured() -> bool:
+    secret = settings.SECRET_KEY.encode("utf-8")
     return bool(
-        settings.AUTH_USERNAME.strip()
-        and password_hash_valid
+        configured_users()
         and len(secret) >= 32
         and settings.SECRET_KEY != "dev-secret-key-change-in-production"
     )
@@ -108,7 +145,7 @@ def verify_token(token: str) -> str | None:
         expiration = claims.get("exp")
         if (
             not isinstance(username, str)
-            or username != settings.AUTH_USERNAME
+            or username not in configured_users()
             or not isinstance(expiration, int)
             or expiration <= int(time.time())
         ):

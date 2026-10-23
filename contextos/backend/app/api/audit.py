@@ -6,11 +6,16 @@ from app.core.database import get_db
 from app.models.audit import AuditEvent
 from app.models.repository import Repository
 from app.schemas.audit import AuditEventResponse
+from app.api.dependencies import require_repository_owner
 
 router = APIRouter()
 
 
-@router.get("/{repo_id}/audit-events", response_model=list[AuditEventResponse])
+@router.get(
+    "/{repo_id}/audit-events",
+    response_model=list[AuditEventResponse],
+    dependencies=[Depends(require_repository_owner)],
+)
 async def list_audit_events(
     repo_id: str,
     skip: int = Query(0, ge=0, le=10000),

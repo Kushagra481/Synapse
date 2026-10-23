@@ -1,8 +1,8 @@
-"""Authentication endpoints for the configured workspace operator."""
+"""Authentication endpoints for configured workspace users."""
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from app.core.auth import auth_is_configured, issue_token, verify_password
+from app.core.auth import auth_is_configured, configured_users, issue_token, verify_password
 from app.core.config import settings
 from app.api.dependencies import require_bearer_auth
 from fastapi import Depends
@@ -30,10 +30,13 @@ async def login(payload: LoginRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication is enabled but not configured. Set the workspace auth secrets.",
         )
-    if (
-        payload.username != settings.AUTH_USERNAME
-        or not verify_password(payload.password, settings.AUTH_PASSWORD_HASH)
-    ):
+    users = configured_users()
+    password_hash = users.get(payload.username)
+    # Verify against a configured verifier even for unknown usernames so login
+    # failures do not immediately reveal whether the account name exists.
+    verifier_to_check = password_hash or next(iter(users.values()))
+    password_valid = verify_password(payload.password, verifier_to_check)
+    if not password_hash or not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",

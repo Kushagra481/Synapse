@@ -8,6 +8,7 @@ from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
 from app.models.repository import Repository
 from app.schemas.evaluation import EvalCaseCreate, EvalCaseResponse, EvalRunCreate, EvalRunResponse
 from app.services.evaluation import run_retrieval_benchmark
+from app.api.dependencies import require_repository_editor
 
 router = APIRouter()
 
@@ -21,6 +22,7 @@ async def _require_repository(db: AsyncSession, repository_id: str) -> None:
     "/{repo_id}/evaluations/cases",
     response_model=EvalCaseResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
 )
 async def create_case(
     repo_id: str, payload: EvalCaseCreate, db: AsyncSession = Depends(get_db)
@@ -54,7 +56,11 @@ async def list_cases(
     return {"items": rows.all(), "total": total}
 
 
-@router.delete("/{repo_id}/evaluations/cases/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}/evaluations/cases/{case_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def delete_case(
     repo_id: str, case_id: str, db: AsyncSession = Depends(get_db)
 ):
@@ -70,6 +76,7 @@ async def delete_case(
     "/{repo_id}/evaluations/runs",
     response_model=EvalRunResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
 )
 async def create_run(
     repo_id: str, payload: EvalRunCreate, db: AsyncSession = Depends(get_db)

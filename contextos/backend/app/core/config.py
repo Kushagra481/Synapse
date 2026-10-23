@@ -29,16 +29,17 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     APP_ENV: str = "development"
     APP_DEBUG: bool = False
-    SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
+    SECRET_KEY: str = Field(default="")
     AUTH_ENABLED: bool = True
     AUTH_USERNAME: str = ""
     AUTH_PASSWORD_HASH: str = ""
+    AUTH_USERS_JSON: str = ""
     AUTH_TOKEN_TTL_SECONDS: int = 28800
 
     # ── PostgreSQL ────────────────────────────────────────────────────────────
-    DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://contextos:contextos_secret@localhost:5432/contextos"
-    )
+    # Keep credentials out of source defaults; deployments provide this through
+    # DATABASE_URL (Docker Compose also injects it from the environment).
+    DATABASE_URL: str = Field(default="postgresql+asyncpg://localhost:5432/contextos")
     # Sync URL for Alembic migrations (asyncpg → psycopg2)
     @property
     def DATABASE_URL_SYNC(self) -> str:
@@ -51,7 +52,7 @@ class Settings(BaseSettings):
     # ── Neo4j ─────────────────────────────────────────────────────────────────
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "contextos_neo4j"
+    NEO4J_PASSWORD: str = ""
     NEO4J_DATABASE: str = "neo4j"
 
     # ── Embeddings ────────────────────────────────────────────────────────────

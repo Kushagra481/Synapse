@@ -7,11 +7,17 @@ from app.models.session import Session, Conversation
 from app.models.session import SessionStatus
 from app.schemas.session import SessionCreate, SessionUpdate, SessionResponse, ConversationCreate, ConversationUpdate, ConversationResponse
 from app.services.session_snapshot import capture_git_snapshot
+from app.api.dependencies import require_repository_editor
 
 router = APIRouter()
 
 
-@router.post("/{repo_id}/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{repo_id}/sessions",
+    response_model=SessionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def create_session(repo_id: str, payload: SessionCreate, db: AsyncSession = Depends(get_db)):
     repository = await db.get(Repository, repo_id)
     if not repository:
@@ -49,7 +55,11 @@ async def get_session(repo_id: str, session_id: str, db: AsyncSession = Depends(
     return row
 
 
-@router.patch("/{repo_id}/sessions/{session_id}", response_model=SessionResponse)
+@router.patch(
+    "/{repo_id}/sessions/{session_id}",
+    response_model=SessionResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_session(repo_id: str, session_id: str, payload: SessionUpdate, db: AsyncSession = Depends(get_db)):
     row = await db.get(Session, session_id)
     if not row or row.repository_id != repo_id:
@@ -71,7 +81,11 @@ async def update_session(repo_id: str, session_id: str, payload: SessionUpdate, 
     return row
 
 
-@router.delete("/{repo_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def delete_session(repo_id: str, session_id: str, db: AsyncSession = Depends(get_db)):
     row = await db.get(Session, session_id)
     if not row or row.repository_id != repo_id:
@@ -81,7 +95,12 @@ async def delete_session(repo_id: str, session_id: str, db: AsyncSession = Depen
     return None
 
 
-@router.post("/{repo_id}/sessions/{session_id}/conversations", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{repo_id}/sessions/{session_id}/conversations",
+    response_model=ConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def create_conversation(repo_id: str, session_id: str, payload: ConversationCreate, db: AsyncSession = Depends(get_db)):
     session = await db.get(Session, session_id)
     if not session or session.repository_id != repo_id:
@@ -103,7 +122,11 @@ async def list_conversations(repo_id: str, session_id: str, db: AsyncSession = D
     return {"items": items, "total": len(items)}
 
 
-@router.patch("/{repo_id}/sessions/{session_id}/conversations/{conversation_id}", response_model=ConversationResponse)
+@router.patch(
+    "/{repo_id}/sessions/{session_id}/conversations/{conversation_id}",
+    response_model=ConversationResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_conversation(repo_id: str, session_id: str, conversation_id: str, payload: ConversationUpdate, db: AsyncSession = Depends(get_db)):
     row = await db.get(Conversation, conversation_id)
     if not row or row.repository_id != repo_id or row.session_id != session_id:

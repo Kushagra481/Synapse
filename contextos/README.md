@@ -31,12 +31,12 @@ Indexing follows `.gitignore`, the configured excluded-name patterns, file-size/
 ## Run locally with Docker
 
 1. Copy `.env.example` to `.env` and set unique database passwords and a random `SECRET_KEY` of at least 32 characters. Keep `.env` private; it is ignored by Git.
-2. Set `AUTH_USERNAME`. Generate an `AUTH_PASSWORD_HASH` by running `cd backend && python -m app.auth_cli` after installing backend requirements; store the resulting verifier in the environment, not in chat. Authentication is enabled by default. Until all three auth settings are valid, protected API routes return 503.
+2. For a single operator, set `AUTH_USERNAME` and generate `AUTH_PASSWORD_HASH` by running `cd backend && python -m app.auth_cli` after installing backend requirements. For multiple accounts, set `AUTH_USERS_JSON` to a JSON object mapping each username to a generated scrypt verifier, for example `{"alice":"<verifier>","bob":"<verifier>"}`. Generate one verifier per account with the same CLI and store the JSON in the deployment secret store; never put plaintext passwords in configuration. When switching an existing deployment to the multi-user map, include its current owner account so existing repositories stay accessible. Authentication is enabled by default. Until a valid account map and signing secret are configured, protected API routes return 503.
 3. Optional: set `TYPESAFE_API_KEY` from the TypeSafe console. Without it, handoffs use the local relevance scorer. Leave `EMBEDDINGS_ALLOW_SOURCE_UPLOAD=false` unless you intentionally approve sending source snippets to an embedding provider.
 4. Start services with `docker compose up --build` from this directory.
 5. Open the frontend at http://localhost:5173 and sign in. API docs are at http://localhost:8000/docs after authenticating.
 
-The first backend start creates missing tables. For an existing database, run `docker compose exec backend alembic upgrade head` to add indexing, evaluation, provenance-backed memory facts, audit events, repository-owner, and session snapshot schema. For future schema changes, add and apply Alembic revisions instead of relying on `create_all` to alter existing tables.
+The first backend start creates missing tables. For an existing database, run `docker compose exec backend alembic upgrade head` to add indexing, evaluation, provenance-backed memory facts, audit events, repository ownership, session snapshots, and project memberships. The membership migration carries existing repository owners forward. For future schema changes, add and apply Alembic revisions instead of relying on `create_all` to alter existing tables.
 
 ## MCP setup
 
@@ -66,7 +66,7 @@ TypeSafe Jev uses POST https://api.typesafe.ai/v1/systemone with `TYPESAFE_API_K
 
 ## API and safety notes
 
-Authentication is a single configured workspace account with repository-owner scoping; there is no account signup, invitation flow, or role-based sharing yet. This is not a finished multi-tenant SaaS deployment. Use TLS and rate limiting at a trusted reverse proxy before exposing it beyond a trusted network, keep secrets in the deployment's secret store, and rotate any credential that was ever committed to Git. Disabling auth is only appropriate for an isolated local environment.
+Authentication supports either the legacy single configured account or a fixed `AUTH_USERS_JSON` workspace account map. Repository owners can add configured accounts as editors or viewers in the Members page. Viewers can read project data and request handoffs; editors can change project data; only owners can manage members, inspect the audit trail, or delete the repository. There is no self-service signup, password reset, invitation email, or account lifecycle service: an operator provisions accounts and password verifiers in deployment secrets. This is not a finished multi-tenant SaaS deployment. Use TLS and rate limiting at a trusted reverse proxy before exposing it beyond a trusted network, keep secrets in the deployment's secret store, and rotate any credential that was ever committed to Git. Disabling auth is only appropriate for an isolated local environment.
 
 ### Deliberate limits in this PR
 
@@ -75,7 +75,7 @@ Authentication is a single configured workspace account with repository-owner sc
 - Indexing is synchronous; there is no job queue or per-file live progress stream. A refresh reports its final status and preserves the last good index on failure.
 - Session start/end captures branch, commit, dirty state, and changed path names, but not diffs, tests, or editor events. Agents still provide the session summary and next steps through MCP/API; no universal editor hook is claimed.
 - `backend/scripts/run_benchmark.py` creates disposable local fixtures and exercises indexing, retrieval, and task-specific handoff packing; the recorded sample is in `test_results.md`. By default it runs an offline fresh-consumer simulation. An optional JSON-in/JSON-out adapter can invoke a user-selected agent command and score recovered task state, decisions, paths, and next steps. This does not test code-writing success or live provider quality unless the user configures and runs such an agent. The fixture is not representative-corpus performance data; a token-savings baseline and ranking ablation suite are not included.
-- The account model is one configured workspace login, not user memberships/roles. Code below enforces this configured owner boundary; multi-user collaboration still needs a membership model.
+- Accounts are provisioned by the workspace operator, not through public signup. Memberships are project-scoped and support owner/editor/viewer roles; account lifecycle, invitations, password reset, and self-service organization management are not included.
 - Permanent erasure/retention management and cross-service deletion reconciliation are not provided. Memory facts use soft deletion; repository deletion removes its indexed database rows and graph cleanup can block deletion if it fails.
 
 ## Tests

@@ -13,7 +13,7 @@ from app.core.database import init_db, close_db
 from app.core.database import get_session_factory
 from app.core.graph import init_graph, close_graph
 from app.core.logging import configure_logging
-from app.api import auth, health, repositories, tasks, decisions, memory, sessions, context, evaluations, audit
+from app.api import auth, health, repositories, tasks, decisions, memory, sessions, context, evaluations, audit, memberships
 from app.models.audit import AuditEvent
 from app.api.dependencies import require_bearer_auth, require_repository_access
 
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(context.router, prefix="/repositories", tags=["Agent Context"], dependencies=access_check)
     app.include_router(evaluations.router, prefix="/repositories", tags=["Evaluations"], dependencies=access_check)
     app.include_router(audit.router, prefix="/repositories", tags=["Audit"], dependencies=access_check)
+    app.include_router(memberships.router, prefix="/repositories", tags=["Members"], dependencies=access_check)
 
     @app.middleware("http")
     async def authenticate(request: Request, call_next):

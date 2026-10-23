@@ -5,11 +5,17 @@ from app.core.database import get_db
 from app.models.repository import Repository
 from app.models.decision import Decision
 from app.schemas.decision import DecisionCreate, DecisionResponse, DecisionUpdate
+from app.api.dependencies import require_repository_editor
 
 router = APIRouter()
 
 
-@router.post("/{repo_id}/decisions", response_model=DecisionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{repo_id}/decisions",
+    response_model=DecisionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def create_decision(repo_id: str, payload: DecisionCreate, db: AsyncSession = Depends(get_db)):
     if not await db.get(Repository, repo_id):
         raise HTTPException(status_code=404, detail="Repository not found")
@@ -30,7 +36,11 @@ async def list_decisions(repo_id: str, skip: int = 0, limit: int = 100, db: Asyn
     return {"items": rows.all(), "total": total}
 
 
-@router.patch("/{repo_id}/decisions/{decision_id}", response_model=DecisionResponse)
+@router.patch(
+    "/{repo_id}/decisions/{decision_id}",
+    response_model=DecisionResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_decision(repo_id: str, decision_id: str, payload: DecisionUpdate, db: AsyncSession = Depends(get_db)):
     row = await db.get(Decision, decision_id)
     if not row or row.repository_id != repo_id:
@@ -42,7 +52,11 @@ async def update_decision(repo_id: str, decision_id: str, payload: DecisionUpdat
     return row
 
 
-@router.delete("/{repo_id}/decisions/{decision_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}/decisions/{decision_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def delete_decision(repo_id: str, decision_id: str, db: AsyncSession = Depends(get_db)):
     row = await db.get(Decision, decision_id)
     if not row or row.repository_id != repo_id:

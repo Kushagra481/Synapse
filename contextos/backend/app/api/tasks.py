@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.models.repository import Repository
 from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse, TaskUpdate
+from app.api.dependencies import require_repository_editor
 
 router = APIRouter()
 
@@ -14,7 +15,12 @@ async def _require_repo(db: AsyncSession, repo_id: str):
         raise HTTPException(status_code=404, detail="Repository not found")
 
 
-@router.post("/{repo_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{repo_id}/tasks",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def create_task(repo_id: str, payload: TaskCreate, db: AsyncSession = Depends(get_db)):
     await _require_repo(db, repo_id)
     row = Task(repository_id=repo_id, **payload.model_dump())
@@ -33,7 +39,11 @@ async def list_tasks(repo_id: str, skip: int = 0, limit: int = 100, db: AsyncSes
     return {"items": rows.all(), "total": total}
 
 
-@router.patch("/{repo_id}/tasks/{task_id}", response_model=TaskResponse)
+@router.patch(
+    "/{repo_id}/tasks/{task_id}",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def update_task(repo_id: str, task_id: str, payload: TaskUpdate, db: AsyncSession = Depends(get_db)):
     row = await db.get(Task, task_id)
     if not row or row.repository_id != repo_id:
@@ -45,7 +55,11 @@ async def update_task(repo_id: str, task_id: str, payload: TaskUpdate, db: Async
     return row
 
 
-@router.delete("/{repo_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repo_id}/tasks/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_repository_editor)],
+)
 async def delete_task(repo_id: str, task_id: str, db: AsyncSession = Depends(get_db)):
     row = await db.get(Task, task_id)
     if not row or row.repository_id != repo_id:

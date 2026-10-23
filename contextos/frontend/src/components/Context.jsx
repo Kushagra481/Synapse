@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
-export default function Context({ repo, addToast }) {
+export default function Context({ repo, addToast, canEdit = false }) {
   const [task, setTask] = useState('')
   const [budget, setBudget] = useState(4000)
   const [result, setResult] = useState(null)
@@ -98,14 +98,14 @@ export default function Context({ repo, addToast }) {
               : `Index status: ${index?.ingestion_status || 'checking…'}`}
           </p>
         </div>
-        <div className="page-header-actions">
+        {canEdit && <div className="page-header-actions">
           <button className="btn btn-primary" onClick={() => ingest(false)} disabled={indexing}>
             {indexing ? 'Indexing…' : index?.file_count ? 'Refresh index' : 'Index repository'}
           </button>
           <button className="btn btn-ghost" onClick={() => ingest(true)} disabled={indexing}>
             Full re-index
           </button>
-        </div>
+        </div>}
       </div>
       {index?.indexed_commit_sha && <p className="text-muted">Indexed commit: <span className="monospace">{index.indexed_commit_sha.slice(0, 12)}</span> · {index.indexed_at ? new Date(index.indexed_at).toLocaleString() : ''}</p>}
       {index && <p className="text-muted" style={{ marginTop: 6 }}>Embeddings: {index.embedding_status || 'not configured'} ({index.embedding_count || 0}) · Graph sync: {index.graph_sync_status || 'pending'}</p>}

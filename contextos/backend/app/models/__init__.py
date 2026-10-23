@@ -10,6 +10,7 @@ from app.models.code_index import IndexedFile, CodeSymbol, CodeImport, Repositor
 from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
 from app.models.memory_fact import ProjectMemoryFact
 from app.models.audit import AuditEvent
+from app.models.membership import ProjectMembership
 
 __all__ = [
     "Base",
@@ -34,4 +35,5 @@ __all__ = [
     "ProjectMemoryFact",
     "AuditEvent",
     "RepositoryIndexState",
+    "ProjectMembership",
 ]
