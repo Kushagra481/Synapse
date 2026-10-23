@@ -19,7 +19,7 @@ class SessionBase(BaseModel):
     next_steps: Optional[List[Any]] = None
 
 class SessionCreate(SessionBase):
-    repository_id: str = Field(..., max_length=36)
+    repository_id: Optional[str] = Field(None, max_length=36)
 
 class SessionUpdate(BaseModel):
     llm_provider: Optional[str] = Field(None, max_length=64)

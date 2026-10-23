@@ -1,4 +1,3 @@
-import asyncio
 import os
 from typing import AsyncGenerator
 
@@ -24,13 +23,6 @@ test_engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
 TestingSessionLocal = async_sessionmaker(
     autocommit=False, autoflush=False, bind=test_engine, class_=AsyncSession
 )
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for each test case."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_test_db():

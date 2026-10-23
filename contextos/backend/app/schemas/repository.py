@@ -1,23 +1,16 @@
-"""Pydantic schemas for Repository API."""
-
-from __future__ import annotations
-
+"""Request and response schemas for repository records."""
 from datetime import datetime
 from typing import Optional
-
-from pydantic import BaseModel, Field
-
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from app.models.repository import IngestionStatus
 
 
-# ── Request Schemas ────────────────────────────────────────────────────────────
-
 class RepositoryCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255, description="Repository display name")
-    local_path: str = Field(..., description="Absolute path to the local Git repository")
-    description: Optional[str] = Field(None, description="Brief repository description")
-    default_branch: str = Field("main", description="Default Git branch")
-    language: Optional[str] = Field(None, description="Primary programming language")
+    name: str = Field(..., min_length=1, max_length=255)
+    local_path: str = Field(..., min_length=1, validation_alias=AliasChoices("local_path", "url"))
+    description: Optional[str] = None
+    default_branch: str = Field("main", max_length=255)
+    language: Optional[str] = Field(None, validation_alias=AliasChoices("language", "primary_language"))
 
 
 class RepositoryUpdate(BaseModel):
@@ -26,11 +19,8 @@ class RepositoryUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-# ── Response Schemas ───────────────────────────────────────────────────────────
-
 class RepositoryResponse(BaseModel):
-    model_config = {"from_attributes": True}
-
+    model_config = ConfigDict(from_attributes=True)
     id: str
     name: str
     description: Optional[str]
