@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # ── Repository Storage ────────────────────────────────────────────────────
     REPO_CACHE_DIR: str = ".repo_cache"
     MAX_FILE_SIZE_BYTES: int = 524288  # 512 KB
+    MAX_INDEXED_FILES: int = 10000
+    MAX_INDEXED_TOTAL_BYTES: int = 104857600  # 100 MB per indexing run
+    # Comma-separated absolute/relative roots that local indexing is allowed to read.
+    REPO_ALLOWED_ROOTS: str = ".repo_cache"
 
     # ── Logging ───────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

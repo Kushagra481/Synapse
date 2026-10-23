@@ -42,7 +42,16 @@ def _lexical_score(item: dict[str, Any], task: str) -> float:
     return item["base"] + min(hits / max(len(words), 1), 1.0) * 0.6 + age_bonus
 
 
-async def build_context_pack(repo, memory, tasks, decisions, sessions, task: str = "", max_tokens: int = 4000) -> dict[str, Any]:
+async def build_context_pack(
+    repo,
+    memory,
+    tasks,
+    decisions,
+    sessions,
+    task: str = "",
+    max_tokens: int = 4000,
+    code_results: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     budget = min(max(int(max_tokens), 128), 32000)
     items: list[dict[str, Any]] = []
     if repo:
@@ -64,9 +73,34 @@ async def build_context_pack(repo, memory, tasks, decisions, sessions, task: str
         if item: items.append(item)
 
     lexical = [_lexical_score(item, task) for item in items]
+    # Jev sees saved context summaries only. Repository source is never sent to
+    # an external scorer; code evidence is ranked locally by the search service.
     jev_scores = await score_relevance(task, items) if task.strip() else None
     for index, item in enumerate(items):
         item["score"] = (jev_scores[index] if jev_scores and index < len(jev_scores) else lexical[index])
+    for result in code_results or []:
+        path = result.get("file_path", "")
+        start_line = result.get("start_line", 0)
+        end_line = result.get("end_line", 0)
+        title = f"{result.get('qualified_name') or result.get('symbol') or path} ({path}:{start_line}-{end_line})"
+        content = (
+            f"Source: {path}:{start_line}-{end_line}\n"
+            f"Commit: {result.get('indexed_commit_sha') or 'uncommitted snapshot'}\n"
+            f"Freshness: {result.get('freshness', 'indexed_snapshot')}\n"
+            f"Relevance: {result.get('relevance_reason', 'Local lexical search')}\n\n"
+            f"{result.get('source_text', '')}"
+        )
+        item = _candidate("code evidence", title, content, base=float(result.get("relevance_score", 0.0)))
+        if item:
+            item["score"] = float(result.get("relevance_score", 0.0))
+            item["source"] = {
+                "file_path": path,
+                "start_line": start_line,
+                "end_line": end_line,
+                "indexed_commit_sha": result.get("indexed_commit_sha"),
+                "freshness": result.get("freshness", "indexed_snapshot"),
+            }
+            items.append(item)
     items.sort(key=lambda item: item["score"], reverse=True)
 
     lines = [f"# ContextOS handoff: {repo.name if repo else 'Project'}", "", "Use this as saved project context. Keep working state updated before ending your session."]
@@ -83,4 +117,21 @@ async def build_context_pack(repo, memory, tasks, decisions, sessions, task: str
         lines.append(section)
         included.append(item)
     text = "\n".join(lines)
-    return {"text": text, "estimated_tokens": estimate_tokens(text), "budget_tokens": budget, "included_items": len(included), "available_items": len(items), "omitted_items": len(items) - len(included), "jev_used": bool(jev_scores), "items": [{"kind": item["kind"], "title": item["title"], "relevance": round(float(item["score"]), 3)} for item in included]}
+    return {
+        "text": text,
+        "estimated_tokens": estimate_tokens(text),
+        "budget_tokens": budget,
+        "included_items": len(included),
+        "available_items": len(items),
+        "omitted_items": len(items) - len(included),
+        "jev_used": bool(jev_scores),
+        "items": [
+            {
+                "kind": item["kind"],
+                "title": item["title"],
+                "relevance": round(float(item["score"]), 3),
+                **({"source": item["source"]} if item.get("source") else {}),
+            }
+            for item in included
+        ],
+    }

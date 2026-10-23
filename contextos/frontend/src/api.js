@@ -25,6 +25,9 @@ export const api = {
     create: data => req('POST', '/repositories', data),
     update: (id, data) => req('PATCH', '/repositories/' + id, data),
     delete: id => req('DELETE', '/repositories/' + id),
+    index: id => req('GET', '/repositories/' + id + '/index'),
+    ingest: (id, fullReindex = false) => req('POST', '/repositories/' + id + '/ingest?full_reindex=' + fullReindex),
+    search: (id, query, limit = 20) => req('GET', '/repositories/' + id + '/code/search?q=' + encodeURIComponent(query) + '&limit=' + limit),
   },
   sessions: {
     list: (repoId) => list('/repositories/' + repoId + '/sessions'),

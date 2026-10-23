@@ -6,11 +6,21 @@ ContextOS keeps concise, structured project memory outside any one coding agent.
 
 - Repository, task, decision, memory, bug, session, and session-note APIs.
 - A React workspace for repositories, tasks, persistent project memory, decisions, sessions, and handoff generation.
+- Opt-in local repository indexing with Tree-sitter symbols for Python, JavaScript, TypeScript/TSX, Java, and C/C++; plain-text fallback chunks for supported documentation/config files.
+- Incremental refresh by file content hash, deletion of stale file/symbol records, searchable code evidence with paths and line ranges, and inclusion of relevant indexed code in agent handoffs.
 - A token-budgeted context endpoint: POST /repositories/{repository_id}/context accepts a task and a max_tokens budget and returns Markdown plus an estimated size.
 - Optional TypeSafe Jev scoring to prioritize context items for a task. ContextOS assembles the final packet deterministically; Jev only returns structured relevance probabilities. If the key is absent or Jev is unavailable, local lexical ranking is used.
 - An MCP stdio server with tools to fetch context, start/finish sessions, record decisions, and update project memory.
 
 The saved records and generated context packet are not full chat logs. The handoff does not include Conversation.raw_content.
+
+## Index a local repository
+
+Indexing is read-only and only accepts Git repository roots inside `REPO_ALLOWED_ROOTS`. With Docker Compose, `REPOSITORY_ROOT` is mounted read-only at `/repos`; the example `.env` mounts the parent directory. For a repository at `../my-project`, register `/repos/my-project` in the UI, then choose **Index repository**. You can also call `POST /repositories/{repository_id}/ingest`; pass `?full_reindex=true` to force parsing unchanged files.
+
+`GET /repositories/{repository_id}/index` reports the indexed commit, file/symbol counts, skipped files, and whether the working tree had changes. Search with `GET /repositories/{repository_id}/code/search?q=authentication`. Search results include a source path, line range, indexed commit, and a local lexical relevance explanation. Handoff generation adds matching code evidence within its token budget.
+
+Indexing follows `.gitignore`, the configured excluded-name patterns, file-size/count limits, and a secret-content filter; it skips binary and symlink files. It does not run project code, clone remote URLs, or send indexed source to Jev or an embedding provider. Remote cloning, vector/graph retrieval, and live freshness checks are not implemented yet. Configure `REPO_ALLOWED_ROOTS` explicitly when running outside Docker; it is a comma-separated list of trusted roots.
 
 ## Run locally with Docker
 
@@ -38,7 +48,7 @@ Start the backend first. Configure your coding agent's MCP server with the Conte
 }
 ~~~
 
-The MCP tools let an agent fetch a compact handoff at task start and save a short session summary or decision before it exits. Adjust the command and path to your agent's MCP config format.
+The MCP tools let an agent index/search an allowed local repository, fetch a compact handoff at task start, and save a short session summary or decision before it exits. Adjust the command and path to your agent's MCP config format.
 
 ## Jev configuration
 

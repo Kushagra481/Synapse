@@ -21,6 +21,26 @@ def get_agent_context(repository_id: str, task: str = "", max_tokens: int = 4000
 
 
 @mcp.tool()
+def index_repository(repository_id: str, full_reindex: bool = False) -> dict:
+    """Index or refresh a registered local repository inside ContextOS's allowed read-only roots."""
+    return _request(
+        "POST",
+        f"/repositories/{repository_id}/ingest?full_reindex={str(full_reindex).lower()}",
+    )
+
+
+@mcp.tool()
+def search_repository_code(repository_id: str, query: str, limit: int = 20) -> dict:
+    """Search the indexed symbols and source excerpts for a repository."""
+    from urllib.parse import quote
+
+    return _request(
+        "GET",
+        f"/repositories/{repository_id}/code/search?q={quote(query)}&limit={limit}",
+    )
+
+
+@mcp.tool()
 def start_agent_session(repository_id: str, objective: str, provider: str = "coding-agent", model: str = "unknown", developer_name: str | None = None) -> dict:
     """Record the start of a coding-agent work session."""
     return _request("POST", f"/repositories/{repository_id}/sessions", {"llm_provider": provider, "llm_model": model, "developer_name": developer_name, "objective": objective, "status": "active"})

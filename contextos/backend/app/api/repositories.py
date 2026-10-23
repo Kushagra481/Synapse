@@ -1,10 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.repository import Repository
 from app.schemas.repository import RepositoryCreate, RepositoryListResponse, RepositoryResponse, RepositoryUpdate
+from app.schemas.code_index import CodeSearchResponse, IngestionResponse, RepositoryIndexStatus
+from app.services.repository_index import (
+    RepositoryIndexError,
+    get_index_status,
+    index_repository,
+    search_code,
+)
+from app.models.code_index import CodeSymbol, IndexedFile, RepositoryIndexState
 
 router = APIRouter()
 
@@ -54,13 +62,54 @@ async def delete_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
     repo = await db.get(Repository, repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
+    await db.execute(delete(CodeSymbol).where(CodeSymbol.repository_id == repo_id))
+    await db.execute(delete(IndexedFile).where(IndexedFile.repository_id == repo_id))
+    index_state = await db.get(RepositoryIndexState, repo_id)
+    if index_state:
+        await db.delete(index_state)
     await db.delete(repo)
     await db.commit()
     return None
 
 
-@router.post("/{repo_id}/ingest", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def ingest_repository(repo_id: str, db: AsyncSession = Depends(get_db)):
+@router.post("/{repo_id}/ingest", response_model=IngestionResponse)
+async def ingest_repository(
+    repo_id: str,
+    full_reindex: bool = Query(False, description="Re-parse every eligible file, even when its hash is unchanged."),
+    db: AsyncSession = Depends(get_db),
+):
+    repository = await db.get(Repository, repo_id)
+    if not repository:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    try:
+        result = await index_repository(db, repository, force=full_reindex)
+    except RepositoryIndexError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ingestion_status": "completed", **result}
+
+
+@router.get("/{repo_id}/index", response_model=RepositoryIndexStatus)
+async def repository_index_status(repo_id: str, db: AsyncSession = Depends(get_db)):
+    repository = await db.get(Repository, repo_id)
+    if not repository:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    state = await get_index_status(db, repo_id)
+    return {
+        "repository_id": repo_id,
+        "ingestion_status": repository.ingestion_status.value,
+        "ingestion_error": repository.ingestion_error,
+        **(state or {}),
+    }
+
+
+@router.get("/{repo_id}/code/search", response_model=CodeSearchResponse)
+async def search_repository_code(
+    repo_id: str,
+    q: str = Query(..., min_length=2, max_length=300),
+    path: str | None = Query(None, max_length=1024),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
     if not await db.get(Repository, repo_id):
         raise HTTPException(status_code=404, detail="Repository not found")
-    raise HTTPException(status_code=501, detail="Automatic source ingestion is not available yet. Context is managed through sessions, tasks, decisions, and memory.")
+    return await search_code(db, repo_id, q, limit=limit, path_filter=path)

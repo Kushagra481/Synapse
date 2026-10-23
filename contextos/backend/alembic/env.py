@@ -31,6 +31,7 @@ from app.models.decision import Decision
 from app.models.memory import ProjectMemory, Bug
 from app.models.session import Session, Conversation
 from app.models.task import Task
+from app.models.code_index import IndexedFile, CodeSymbol, RepositoryIndexState
 
 target_metadata = Base.metadata
 

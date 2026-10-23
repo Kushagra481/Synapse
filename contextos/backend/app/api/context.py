@@ -9,6 +9,7 @@ from app.models.task import Task
 from app.models.decision import Decision
 from app.models.session import Session
 from app.services.context_pack import build_context_pack
+from app.services.repository_index import search_code
 
 router = APIRouter()
 
@@ -26,7 +27,13 @@ async def _build(repo_id: str, task: str, max_tokens: int, db: AsyncSession):
     tasks = (await db.scalars(select(Task).where(Task.repository_id == repo_id).order_by(Task.updated_at.desc()).limit(50))).all()
     decisions = (await db.scalars(select(Decision).where(Decision.repository_id == repo_id).order_by(Decision.updated_at.desc()).limit(50))).all()
     sessions = (await db.scalars(select(Session).where(Session.repository_id == repo_id).order_by(Session.updated_at.desc()).limit(10))).all()
-    return await build_context_pack(repo, memory, tasks, decisions, sessions, task, max_tokens)
+    code_results = []
+    if len(task.strip()) >= 2:
+        code_search = await search_code(db, repo_id, task, limit=6)
+        code_results = code_search["results"]
+    return await build_context_pack(
+        repo, memory, tasks, decisions, sessions, task, max_tokens, code_results=code_results
+    )
 
 
 @router.get("/{repo_id}/context")
