@@ -15,9 +15,13 @@ async def test_local_benchmark_script_writes_reproducible_report(tmp_path: Path)
     assert result["metrics"]["lexical"]["recall_at_k"] == 1.0
     assert result["metrics"]["hybrid"]["recall_at_k"] == 1.0
     assert result["metrics"]["jev"]["jev_used"] == 0.0
+    assert result["resume_summary"]["1200"]["resume_success_rate"] == 1.0
+    assert result["resume_summary"]["task_only_baseline"]["context_coverage"] < 1.0
     assert report_path.is_file()
     contents = report_path.read_text(encoding="utf-8")
     assert "Aggregate retrieval metrics" in contents
+    assert "Fresh-agent resume simulation" in contents
     assert "access token validation" in contents
     assert "Jev row is a local hybrid fallback" in contents
+    assert "No actual agent/model was invoked" in contents
     assert "pytest fixture assertion: passed" in contents

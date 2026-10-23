@@ -14,6 +14,7 @@ import os
 import platform
 import sys
 import tempfile
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,9 +25,22 @@ os.environ.setdefault("APP_ENV", "test")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings  # noqa: E402
-from app.models import Base, Repository, RetrievalEvalCase  # noqa: E402
+from app.models import (  # noqa: E402
+    Base,
+    Decision,
+    DecisionCategory,
+    DecisionStatus,
+    Repository,
+    RetrievalEvalCase,
+    Session,
+    SessionStatus,
+    Task,
+    TaskPriority,
+    TaskStatus,
+)
+from app.services.context_pack import build_context_pack  # noqa: E402
 from app.services.evaluation import run_retrieval_benchmark  # noqa: E402
-from app.services.repository_index import index_repository  # noqa: E402
+from app.services.repository_index import index_repository, search_code  # noqa: E402
 
 
 FIXTURE_FILES = {
@@ -89,6 +103,38 @@ CASES = [
     },
 ]
 
+RESUME_CASES = [
+    {
+        "name": "access-token expiry",
+        "task": "Resume the unfinished access-token expiry work and its regression coverage.",
+        "summary": "Access-token verification currently rejects empty tokens but does not check expiry.",
+        "decision": "Keep the verifier's boolean return contract; expired tokens must be rejected.",
+        "next_step": "Add expiry_seconds validation in verify_access_token and test expired plus valid tokens.",
+        "file": "src/auth.py",
+        "markers": ["boolean return contract", "expired tokens must be rejected", "expiry_seconds"],
+    },
+    {
+        "name": "index rollback safety",
+        "task": "Continue the incremental indexing work without losing the previous good snapshot.",
+        "summary": "Incremental refresh parses changed files; a failed refresh must retain the last-good index.",
+        "decision": "Do not replace the last-good index until every changed file has parsed successfully.",
+        "next_step": "Add a failed-refresh regression test in src/ingest.py for last-good index preservation.",
+        "file": "src/ingest.py",
+        "markers": ["last-good index", "parsed successfully", "failed-refresh regression test"],
+    },
+    {
+        "name": "private-source policy",
+        "task": "Resume the privacy review for optional code reranking and keep source local by default.",
+        "summary": "Jev code reranking is optional and the default policy keeps source snippets local.",
+        "decision": "Only send source when JEV_ALLOW_SOURCE_UPLOAD is explicitly enabled.",
+        "next_step": "Add a test for the default source-upload policy in backend/tests/api/test_repository_index.py.",
+        "file": "backend/tests/api/test_repository_index.py",
+        "markers": ["JEV_ALLOW_SOURCE_UPLOAD", "source snippets local", "default source-upload policy"],
+    },
+]
+
+RESUME_BUDGETS = [128, 512, 1200]
+
 
 def create_fixture(root: Path) -> str:
     repository = Repo.init(root)
@@ -104,7 +150,9 @@ def create_fixture(root: Path) -> str:
     return repository.head.commit.hexsha
 
 
-def markdown_report(run, commit_sha: str, verifications: list[str]) -> str:
+def markdown_report(
+    run, resume_results: list[dict], resume_summary: dict, commit_sha: str, verifications: list[str]
+) -> str:
     lines = [
         "# ContextOS test and benchmark results",
         "",
@@ -114,6 +162,7 @@ def markdown_report(run, commit_sha: str, verifications: list[str]) -> str:
         "- Dataset: 5 hand-authored queries over 5 small Python source files (synthetic fixture, not a production corpus)",
         "- External services: TypeSafe/Jev disabled; embeddings and Neo4j disabled; no source was sent externally",
         "- Token accounting: estimates from source-text length, not a model tokenizer or billing measure",
+            "- Resume benchmark mode: deterministic fresh-consumer simulation; no LLM or code-writing agent is invoked",
         "",
         "## Verification performed",
         "",
@@ -184,9 +233,50 @@ def markdown_report(run, commit_sha: str, verifications: list[str]) -> str:
     lines.extend(
         [
             "",
+            "## Fresh-agent resume simulation",
+            "",
+            "A clean consumer receives only the incoming task and the generated handoff packet; it does not receive the saved database records or prior conversation. In this offline benchmark, a resume counts as successful only when the packet contains the case's required decision/continuity markers, target path, and next action. This measures handoff sufficiency, not an LLM's ability to make code changes or pass tests.",
+            "",
+            "| Handoff budget (tokens) | Resume checks passed | Success rate | Required-context coverage | Avg estimated packet tokens |",
+            "|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for budget in RESUME_BUDGETS:
+        summary = resume_summary[str(budget)]
+        lines.append(
+            f"| {budget} | {summary['success_count']}/{summary['case_count']} | "
+            f"{summary['resume_success_rate']:.3f} | {summary['context_coverage']:.3f} | "
+            f"{summary['estimated_tokens']:.1f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "| Case | Budget | Context items recovered | Coverage | Resume check |",
+            "|---|---:|---:|---:|---|",
+        ]
+    )
+    for result in resume_results:
+        lines.append(
+            f"| {result['case_name']} | {result['budget_tokens']} | "
+            f"{result['recovered_items']}/{result['required_items']} | "
+            f"{result['context_coverage']:.3f} | "
+            f"{'pass' if result['resume_success'] else 'incomplete'} |"
+        )
+    baseline = resume_summary["task_only_baseline"]
+    lines.extend(
+        [
+            "",
+            f"- Task-only baseline (no handoff packet): {baseline['context_coverage']:.3f} required-context coverage; "
+            f"{baseline['success_count']}/{baseline['case_count']} complete resume checks.",
+            "- No actual agent/model was invoked. Treat this as a deterministic test of saved-context retrieval and packet budgets, not as measured coding-agent completion accuracy.",
+        ]
+    )
+    lines.extend(
+        [
+            "",
             "## Interpretation",
             "",
-            "These results establish that the indexing and benchmark pipeline run end to end on a reproducible local fixture. They are not evidence of performance on a large or representative customer repository. The Jev row is a local hybrid fallback because the external scorer is intentionally disabled. Latency is a small SQLite-fixture measurement and is not comparable to production PostgreSQL/Neo4j latency.",
+            "These results establish that indexing, retrieval evaluation, and task-specific context packing run end to end on reproducible local fixtures. They are not evidence of performance on a large or representative customer repository. The Jev row is a local hybrid fallback because the external scorer is intentionally disabled. Latency is a small SQLite-fixture measurement and is not comparable to production PostgreSQL/Neo4j latency.",
             "",
             f"- Cases: {run.case_count}; top-k: {run.top_k}; profiles: {', '.join(run.profiles)}.",
             f"- Benchmark run total: {run.latency_ms:.2f} ms across all cases and profiles.",
@@ -195,6 +285,122 @@ def markdown_report(run, commit_sha: str, verifications: list[str]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+async def run_resume_benchmark(db, repository: Repository) -> tuple[list[dict], dict]:
+    """Measure whether a clean consumer can recover required state from a handoff packet."""
+    await db.refresh(repository)
+    repository_id = repository.id
+    repository_context = SimpleNamespace(
+        name=repository.name,
+        description=repository.description,
+        local_path=repository.local_path,
+        default_branch=repository.default_branch,
+        language=repository.language,
+        updated_at=repository.updated_at,
+    )
+    results: list[dict] = []
+    baseline_coverages: list[float] = []
+
+    for case in RESUME_CASES:
+        task_row = Task(
+            repository_id=repository_id,
+            title=f"Resume: {case['name']}",
+            description=case["task"],
+            status=TaskStatus.ACTIVE,
+            priority=TaskPriority.HIGH,
+        )
+        decision_row = Decision(
+            repository_id=repository_id,
+            title=f"Constraint: {case['name']}",
+            context=case["summary"],
+            decision=case["decision"],
+            rationale="Preserve the previously agreed behavior while completing the open task.",
+            status=DecisionStatus.ACCEPTED,
+            category=DecisionCategory.PROCESS,
+        )
+        session_row = Session(
+            repository_id=repository_id,
+            llm_provider="benchmark-fixture",
+            llm_model="deterministic-handoff-probe",
+            status=SessionStatus.COMPLETED,
+            objective=case["task"],
+            summary=case["summary"],
+            conversation_summary=case["summary"],
+            files_modified=[case["file"]],
+            decisions_made=[case["decision"]],
+            next_steps=[case["next_step"]],
+        )
+        db.add_all([task_row, decision_row, session_row])
+        await db.flush()
+
+        code_search = await search_code(db, repository_id, case["task"], limit=3)
+        task_only_text = f"# Incoming task\n{case['task']}"
+        required_items = case["markers"] + [case["file"], case["next_step"]]
+        baseline_found = sum(
+            item.lower() in task_only_text.lower() for item in required_items
+        )
+        baseline_coverages.append(baseline_found / len(required_items))
+        for budget in RESUME_BUDGETS:
+            packet = await build_context_pack(
+                repo=repository_context,
+                memory=None,
+                tasks=[task_row],
+                decisions=[decision_row],
+                sessions=[session_row],
+                task=case["task"],
+                max_tokens=budget,
+                code_results=code_search["results"],
+                retrieval_metadata=code_search["retrieval"],
+            )
+            # The simulated fresh consumer gets only these two strings. Expected
+            # markers remain evaluator-side and are not part of its input.
+            fresh_consumer_input = {
+                "task": case["task"],
+                "handoff_packet": packet["text"],
+            }
+            visible_context = (
+                fresh_consumer_input["task"] + "\n" + fresh_consumer_input["handoff_packet"]
+            ).lower()
+            recovered = sum(item.lower() in visible_context for item in required_items)
+            coverage = recovered / len(required_items)
+            results.append(
+                {
+                    "case_name": case["name"],
+                    "budget_tokens": budget,
+                    "required_items": len(required_items),
+                    "recovered_items": recovered,
+                    "context_coverage": coverage,
+                    "resume_success": recovered == len(required_items),
+                    "estimated_tokens": packet["estimated_tokens"],
+                    "included_items": packet["included_items"],
+                }
+            )
+
+    summary = {}
+    for budget in RESUME_BUDGETS:
+        batch = [row for row in results if row["budget_tokens"] == budget]
+        summary[str(budget)] = {
+            "case_count": len(batch),
+            "success_count": sum(row["resume_success"] for row in batch),
+            "resume_success_rate": (
+                sum(row["resume_success"] for row in batch) / len(batch) if batch else 0.0
+            ),
+            "context_coverage": (
+                sum(row["context_coverage"] for row in batch) / len(batch) if batch else 0.0
+            ),
+            "estimated_tokens": (
+                sum(row["estimated_tokens"] for row in batch) / len(batch) if batch else 0.0
+            ),
+        }
+    summary["task_only_baseline"] = {
+        "case_count": len(baseline_coverages),
+        "success_count": sum(score == 1.0 for score in baseline_coverages),
+        "context_coverage": (
+            sum(baseline_coverages) / len(baseline_coverages) if baseline_coverages else 0.0
+        ),
+    }
+    return results, summary
 
 
 async def run(output_path: Path, verifications: list[str]) -> dict:
@@ -245,10 +451,13 @@ async def run(output_path: Path, verifications: list[str]) -> dict:
                     await db.commit()
 
                     index_summary = await index_repository(db, repository)
+                    resume_results, resume_summary = await run_resume_benchmark(db, repository)
                     run_record = await run_retrieval_benchmark(
                         db, repository_id, ["lexical", "hybrid", "jev"], top_k=5
                     )
-                    report = markdown_report(run_record, commit_sha, verifications)
+                    report = markdown_report(
+                        run_record, resume_results, resume_summary, commit_sha, verifications
+                    )
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_text(report, encoding="utf-8")
                     return {
@@ -257,6 +466,8 @@ async def run(output_path: Path, verifications: list[str]) -> dict:
                         "index": index_summary,
                         "run_id": run_record.id,
                         "metrics": run_record.metrics,
+                        "resume_summary": resume_summary,
+                        "resume_results": resume_results,
                         "cases": run_record.case_results,
                         "report_text": report,
                     }
@@ -283,7 +494,10 @@ def main() -> None:
     )
     args = parser.parse_args()
     result = asyncio.run(run(args.output, args.verification))
-    print(json.dumps({key: value for key, value in result.items() if key != "report_text"}, indent=2))
+    print(json.dumps(
+        {key: value for key, value in result.items() if key not in {"report_text", "cases", "resume_results"}},
+        indent=2,
+    ))
 
 
 if __name__ == "__main__":
