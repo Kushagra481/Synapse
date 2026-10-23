@@ -17,7 +17,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text, Enum as SAEnum, JSON
+from sqlalchemy import ForeignKey, String, Text, Enum as SAEnum, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -61,6 +61,14 @@ class Session(Base, UUIDMixin, TimestampMixin):
     bugs_found: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     open_questions: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     next_steps: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    starting_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    starting_commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    starting_working_tree_dirty: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    handoff_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    handoff_commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    handoff_changed_files: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    handoff_working_tree_dirty: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    git_snapshot_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     repository: Mapped["Repository"] = relationship("Repository", back_populates="sessions")  # noqa: F821
     conversations: Mapped[list["Conversation"]] = relationship(  # noqa: F821

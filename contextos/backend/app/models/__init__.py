@@ -6,6 +6,11 @@ from app.models.task import Task, TaskStatus, TaskPriority
 from app.models.decision import Decision, DecisionStatus, DecisionCategory
 from app.models.session import Session, Conversation, SessionStatus
 from app.models.memory import ProjectMemory, Bug
+from app.models.code_index import IndexedFile, CodeSymbol, CodeImport, RepositoryIndexState
+from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
+from app.models.memory_fact import ProjectMemoryFact
+from app.models.audit import AuditEvent
+from app.models.membership import ProjectMembership
 
 __all__ = [
     "Base",
@@ -22,4 +27,13 @@ __all__ = [
     "Conversation",
     "ProjectMemory",
     "Bug",
+    "IndexedFile",
+    "CodeSymbol",
+    "CodeImport",
+    "RetrievalEvalCase",
+    "RetrievalEvalRun",
+    "ProjectMemoryFact",
+    "AuditEvent",
+    "RepositoryIndexState",
+    "ProjectMembership",
 ]

@@ -19,3 +19,4 @@ dist/
 
 # Local repository clones/cache
 .repo_cache/
+/repos/

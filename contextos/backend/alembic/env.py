@@ -31,6 +31,11 @@ from app.models.decision import Decision
 from app.models.memory import ProjectMemory, Bug
 from app.models.session import Session, Conversation
 from app.models.task import Task
+from app.models.code_index import IndexedFile, CodeSymbol, RepositoryIndexState
+from app.models.evaluation import RetrievalEvalCase, RetrievalEvalRun
+from app.models.memory_fact import ProjectMemoryFact
+from app.models.audit import AuditEvent
+from app.models.membership import ProjectMembership
 
 target_metadata = Base.metadata
 

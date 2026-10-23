@@ -29,12 +29,17 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     APP_ENV: str = "development"
     APP_DEBUG: bool = False
-    SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
+    SECRET_KEY: str = Field(default="")
+    AUTH_ENABLED: bool = True
+    AUTH_USERNAME: str = ""
+    AUTH_PASSWORD_HASH: str = ""
+    AUTH_USERS_JSON: str = ""
+    AUTH_TOKEN_TTL_SECONDS: int = 28800
 
     # ── PostgreSQL ────────────────────────────────────────────────────────────
-    DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://contextos:contextos_secret@localhost:5432/contextos"
-    )
+    # Keep credentials out of source defaults; deployments provide this through
+    # DATABASE_URL (Docker Compose also injects it from the environment).
+    DATABASE_URL: str = Field(default="postgresql+asyncpg://localhost:5432/contextos")
     # Sync URL for Alembic migrations (asyncpg → psycopg2)
     @property
     def DATABASE_URL_SYNC(self) -> str:
@@ -47,7 +52,7 @@ class Settings(BaseSettings):
     # ── Neo4j ─────────────────────────────────────────────────────────────────
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "contextos_neo4j"
+    NEO4J_PASSWORD: str = ""
     NEO4J_DATABASE: str = "neo4j"
 
     # ── Embeddings ────────────────────────────────────────────────────────────
@@ -55,8 +60,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
+    EMBEDDINGS_ALLOW_SOURCE_UPLOAD: bool = False
+    EMBEDDING_BATCH_SIZE: int = 64
+    MAX_EMBEDDINGS_PER_INDEX: int = 1000
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    GRAPH_SYNC_ENABLED: bool = True
 
     # ── LLM ──────────────────────────────────────────────────────────────────
     LLM_PROVIDER: str = "openai"          # openai | anthropic | gemini | ollama
@@ -64,6 +73,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     TYPESAFE_API_KEY: str = ""
+    JEV_ALLOW_SOURCE_UPLOAD: bool = False
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
@@ -78,6 +88,10 @@ class Settings(BaseSettings):
     # ── Repository Storage ────────────────────────────────────────────────────
     REPO_CACHE_DIR: str = ".repo_cache"
     MAX_FILE_SIZE_BYTES: int = 524288  # 512 KB
+    MAX_INDEXED_FILES: int = 10000
+    MAX_INDEXED_TOTAL_BYTES: int = 104857600  # 100 MB per indexing run
+    # Comma-separated absolute/relative roots that local indexing is allowed to read.
+    REPO_ALLOWED_ROOTS: str = ".repo_cache"
 
     # ── Logging ───────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

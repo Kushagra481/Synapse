@@ -1,5 +1,8 @@
 import pytest
 from httpx import AsyncClient
+from pathlib import Path
+from git import Repo
+from app.core.config import settings
 
 
 @pytest.mark.asyncio
@@ -57,3 +60,71 @@ async def test_context_pack_respects_minimum_budget(client: AsyncClient):
     )
     assert response.status_code == 200, response.text
     assert response.json()["estimated_tokens"] <= 128
+
+
+@pytest.mark.asyncio
+async def test_graph_cleanup_only_runs_for_repository_delete(client: AsyncClient, monkeypatch):
+    from app.api import repositories as repository_api
+
+    created = await client.post(
+        "/repositories", json={"name": "delete-check", "local_path": "/tmp/delete-check"}
+    )
+    repo_id = created.json()["id"]
+    calls = []
+
+    async def unavailable(repository_id):
+        calls.append(repository_id)
+        return "unavailable"
+
+    monkeypatch.setattr(repository_api, "delete_repository_graph", unavailable)
+    fetched = await client.get(f"/repositories/{repo_id}")
+    assert fetched.status_code == 200, fetched.text
+    assert calls == []
+
+    deleted = await client.delete(f"/repositories/{repo_id}")
+    assert deleted.status_code == 503
+    assert calls == [repo_id]
+    still_present = await client.get(f"/repositories/{repo_id}")
+    assert still_present.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_session_handoff_captures_git_metadata_without_diff_content(
+    client: AsyncClient, tmp_path, monkeypatch
+):
+    repo_path = tmp_path / "worktree"
+    repo_path.mkdir()
+    git_repo = Repo.init(repo_path)
+    with git_repo.config_writer() as config:
+        config.set_value("user", "name", "ContextOS Test")
+        config.set_value("user", "email", "test@example.invalid")
+    source = repo_path / "module.py"
+    source.write_text("def stable(): return 1\n", encoding="utf-8")
+    git_repo.index.add(["module.py"])
+    git_repo.index.commit("Start snapshot")
+    monkeypatch.setattr(settings, "REPO_ALLOWED_ROOTS", str(tmp_path))
+
+    created = await client.post(
+        "/repositories", json={"name": "snapshot-demo", "local_path": str(repo_path)}
+    )
+    repo_id = created.json()["id"]
+    started = await client.post(
+        f"/repositories/{repo_id}/sessions",
+        json={"llm_provider": "test", "llm_model": "agent", "objective": "Edit module"},
+    )
+    assert started.status_code == 201, started.text
+    session_id = started.json()["id"]
+    start_sha = started.json()["starting_commit_sha"]
+    assert start_sha == git_repo.head.commit.hexsha
+    assert started.json()["git_snapshot_status"] == "captured"
+
+    source.write_text("def stable(): return 2\n", encoding="utf-8")
+    (repo_path / "new.py").write_text("def added(): pass\n", encoding="utf-8")
+    finished = await client.patch(
+        f"/repositories/{repo_id}/sessions/{session_id}",
+        json={"status": "completed", "summary": "Updated module behavior"},
+    )
+    assert finished.status_code == 200, finished.text
+    assert finished.json()["handoff_commit_sha"] == start_sha
+    assert set(finished.json()["handoff_changed_files"]) == {"module.py", "new.py"}
+    assert finished.json()["handoff_working_tree_dirty"] is True

@@ -1,6 +1,7 @@
 """Optional TypeSafe Jev adapter used for relevance scoring, never text generation."""
 from __future__ import annotations
 import os
+import math
 from typing import Any
 import httpx
 from app.core.config import settings
@@ -29,6 +30,18 @@ async def score_relevance(task: str, items: list[dict[str, Any]]) -> list[float]
             response = await client.post(API_URL, headers={"Authorization": f"Bearer {key}"}, json={"model": "jev-latest", "state": state, "questions": questions})
             response.raise_for_status()
             answers = response.json().get("answers", {})
-            return [float(answers.get(f"item_{i}", {}).get("noul", 0.0)) for i in range(len(safe_items))]
+            if any(
+                not isinstance(answers.get(f"item_{i}"), dict)
+                or "noul" not in answers[f"item_{i}"]
+                for i in range(len(safe_items))
+            ):
+                return None
+            scores = [
+                float(answers[f"item_{i}"]["noul"])
+                for i in range(len(safe_items))
+            ]
+            if any(not math.isfinite(score) for score in scores):
+                return None
+            return [max(0.0, min(score, 1.0)) for score in scores]
     except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
         return None
