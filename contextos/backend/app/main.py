@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.auth import auth_is_configured, verify_token
-from app.core.config import settings
+from app.core.config import is_test_runtime, settings
 from app.core.database import init_db, close_db
 from app.core.database import get_session_factory
 from app.core.graph import init_graph, close_graph
@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def _record_audit(request: Request, status_code: int, duration_ms: float) -> None:
-    if settings.APP_ENV == "test":
+    if is_test_runtime():
         return
     try:
         route = request.scope.get("route")
@@ -58,16 +58,20 @@ async def _record_audit(request: Request, status_code: int, duration_ms: float) 
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     start = time.monotonic()
     logger.info("contextos.startup", version=settings.APP_VERSION, env=settings.APP_ENV)
-    if settings.APP_ENV != "test":
+    if not is_test_runtime():
         await init_db()
         logger.info("contextos.postgres.connected")
-        await init_graph()
-        logger.info("contextos.neo4j.connected")
+        if settings.GRAPH_SYNC_ENABLED:
+            await init_graph()
+            logger.info("contextos.neo4j.connected")
+        else:
+            logger.info("contextos.neo4j.disabled")
     logger.info("contextos.startup.complete", elapsed_ms=round((time.monotonic() - start) * 1000, 2))
     yield
-    if settings.APP_ENV != "test":
+    if not is_test_runtime():
         await close_db()
-        await close_graph()
+        if settings.GRAPH_SYNC_ENABLED:
+            await close_graph()
 
 
 def create_app() -> FastAPI:
@@ -88,7 +92,7 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def authenticate(request: Request, call_next):
-        if settings.APP_ENV == "test":
+        if is_test_runtime():
             request.state.principal = "test"
             return await call_next(request)
         if not settings.AUTH_ENABLED:

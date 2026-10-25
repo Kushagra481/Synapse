@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import auth_is_configured, verify_token
-from app.core.config import settings
+from app.core.config import is_test_runtime, settings
 from app.core.database import get_db
 from app.models.repository import Repository
 from app.models.membership import ProjectMembership
@@ -16,7 +16,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 async def require_bearer_auth(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> str:
-    if settings.APP_ENV == "test":
+    if is_test_runtime():
         return "test"
     if not settings.AUTH_ENABLED:
         return "local"
@@ -38,7 +38,7 @@ async def require_bearer_auth(
 async def require_repository_access(
     request: Request, db: AsyncSession = Depends(get_db)
 ) -> None:
-    if settings.APP_ENV == "test":
+    if is_test_runtime():
         return
     repository_id = request.path_params.get("repo_id")
     if not repository_id:
@@ -65,7 +65,7 @@ async def require_repository_access(
 
 async def require_repository_editor(request: Request) -> None:
     """Allow repository mutations to editors and owners, not viewers."""
-    if settings.APP_ENV == "test":
+    if is_test_runtime():
         return
     if getattr(request.state, "repository_role", None) not in {"owner", "editor"}:
         raise HTTPException(status_code=403, detail="Editor access is required.")
@@ -73,7 +73,7 @@ async def require_repository_editor(request: Request) -> None:
 
 async def require_repository_owner(request: Request) -> None:
     """Restrict destructive and membership-management actions to owners."""
-    if settings.APP_ENV == "test":
+    if is_test_runtime():
         return
     if getattr(request.state, "repository_role", None) != "owner":
         raise HTTPException(status_code=403, detail="Owner access is required.")

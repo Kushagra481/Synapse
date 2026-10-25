@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import is_test_runtime, settings
 from app.core.graph import GraphSession
 from app.models.code_index import CodeImport, CodeSymbol, IndexedFile
 
@@ -19,7 +19,7 @@ async def sync_repository_graph(
     db: AsyncSession, repository_id: str, repository_name: str, commit_sha: str | None
 ) -> str:
     """Rebuild the repository's graph projection from committed SQL index data."""
-    if not settings.GRAPH_SYNC_ENABLED or settings.APP_ENV == "test":
+    if not settings.GRAPH_SYNC_ENABLED or is_test_runtime():
         return "disabled"
     try:
         graph = GraphSession()
@@ -146,7 +146,7 @@ async def sync_repository_graph(
 
 
 async def delete_repository_graph(repository_id: str) -> str:
-    if not settings.GRAPH_SYNC_ENABLED or settings.APP_ENV == "test":
+    if not settings.GRAPH_SYNC_ENABLED or is_test_runtime():
         return "disabled"
     try:
         graph = GraphSession()
@@ -172,7 +172,7 @@ async def delete_repository_graph(repository_id: str) -> str:
 
 async def related_file_ids(repository_id: str, file_ids: list[str]) -> list[str]:
     """Return one-hop resolved import neighbors for lexical candidates."""
-    if not settings.GRAPH_SYNC_ENABLED or settings.APP_ENV == "test" or not file_ids:
+    if not settings.GRAPH_SYNC_ENABLED or is_test_runtime() or not file_ids:
         return []
     try:
         graph = GraphSession()

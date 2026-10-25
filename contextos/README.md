@@ -13,7 +13,7 @@ ContextOS keeps concise, structured project memory outside any one coding agent.
 - Provenance-aware memory facts keep source type, confidence, verification status, indexed file/commit/hash, conflict review, supersession history, and soft deletion. Conflicting or stale facts are excluded from new handoffs.
 - Minimal append-only audit metadata records repository actions and login attempts without storing request bodies, prompts, or credentials.
 - A metadata-only Git snapshot at session start and handoff records branch, commit, dirty state, and changed path names without storing a diff.
-- A signed bearer-login gate enabled by default, plus per-repository owner scoping for the configured workspace account.
+- A signed bearer-login gate enabled by default, with project-scoped owner/editor/viewer access and owner-managed membership.
 - A token-budgeted context endpoint: POST /repositories/{repository_id}/context accepts a task and a max_tokens budget and returns Markdown plus an estimated size.
 - Optional TypeSafe Jev scoring to prioritize context items for a task or rerank repository-search candidates. ContextOS assembles the final packet deterministically; Jev only returns structured relevance probabilities. Local ranking remains available when the key is absent or the service is unavailable.
 - An MCP stdio server with tools to fetch context, start/finish sessions, record decisions, search code, and create/list provenance-aware memory facts.
