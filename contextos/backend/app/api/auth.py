@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.core.auth import auth_is_configured, configured_users, issue_token, verify_password
-from app.core.config import settings
+from app.core.config import is_test_runtime, settings
 from app.api.dependencies import require_bearer_auth
 from fastapi import Depends
 
@@ -17,13 +17,13 @@ class LoginRequest(BaseModel):
 
 @router.get("/status")
 async def auth_status():
-    enabled = settings.AUTH_ENABLED and settings.APP_ENV != "test"
+    enabled = settings.AUTH_ENABLED and not is_test_runtime()
     return {"enabled": enabled, "configured": auth_is_configured() if enabled else True}
 
 
 @router.post("/login")
 async def login(payload: LoginRequest):
-    if not settings.AUTH_ENABLED or settings.APP_ENV == "test":
+    if not settings.AUTH_ENABLED or is_test_runtime():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Authentication is disabled.")
     if not auth_is_configured():
         raise HTTPException(

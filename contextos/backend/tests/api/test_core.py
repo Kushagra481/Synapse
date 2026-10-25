@@ -6,6 +6,35 @@ from app.core.config import settings
 
 
 @pytest.mark.asyncio
+async def test_graph_disabled_does_not_block_application_startup(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "GRAPH_SYNC_ENABLED", False)
+    calls = []
+
+    async def record_db_start():
+        calls.append("db_start")
+
+    async def record_db_stop():
+        calls.append("db_stop")
+
+    async def unexpected_graph_call():
+        raise AssertionError("Graph lifecycle must be skipped when graph sync is disabled.")
+
+    monkeypatch.setattr(main, "init_db", record_db_start)
+    monkeypatch.setattr(main, "close_db", record_db_stop)
+    monkeypatch.setattr(main, "init_graph", unexpected_graph_call)
+    monkeypatch.setattr(main, "close_graph", unexpected_graph_call)
+
+    app = main.create_app()
+    async with main.lifespan(app):
+        assert calls == ["db_start"]
+
+    assert calls == ["db_start", "db_stop"]
+
+
+@pytest.mark.asyncio
 async def test_repository_task_and_context_handoff(client: AsyncClient):
     created = await client.post("/repositories", json={"name": "handoff-demo", "url": "https://example.com/repo.git", "primary_language": "Python"})
     assert created.status_code == 201, created.text
