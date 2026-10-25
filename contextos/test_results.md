@@ -1,7 +1,7 @@
 # ContextOS test and benchmark results
 
-- Generated: 2026-10-23T10:46:37+00:00
-- Benchmark fixture commit: `53e091d397f19bc25667e975d84779d25ef09569`
+- Generated: 2026-10-25T17:12:38+00:00
+- Benchmark fixture commit: `ec75fcec062b1547a7c0e573eeb5fb59b086b226`
 - Runtime: Python 3.11.17, SQLite in-memory database
 - Dataset: 5 hand-authored queries over 5 small Python source files (synthetic fixture, not a production corpus)
 - External services: TypeSafe/Jev disabled; embeddings and Neo4j disabled; no source was sent externally
@@ -10,9 +10,9 @@
 
 ## Verification performed
 
-- Backend Docker image build: passed after removing credential defaults
-- pytest -q: 36 passed in 5.74 seconds; includes configuration-default and owner/editor/viewer authorization coverage
-- npm run build: passed (no frontend changes in this security fix)
+- Backend Docker image build: passed with production Uvicorn command
+- pytest -q: 38 passed in 6.08 seconds; includes auth test-mode guard, optional graph startup, config defaults, and project-role authorization
+- npm run build: passed (Vite production build)
 - MCP server import: passed
 - Benchmark CLI help: passed
 - Alembic upgrade head: passed from legacy schema and create_all bootstrap; owners backfilled
@@ -22,9 +22,9 @@
 
 | Profile | P@5 | Recall@5 | MRR | nDCG@5 | Correct file | Correct symbol | Provenance | Freshness | Jev used | Avg estimated tokens | Avg search latency (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| lexical | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 13.88 |
-| hybrid | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 14.98 |
-| jev | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 13.61 |
+| lexical | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 13.27 |
+| hybrid | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 13.87 |
+| jev | 0.280 | 1.000 | 1.000 | 0.814 | 1.000 | 1.000 | 0.520 | 0.520 | 0.000 | 56.0 | 13.33 |
 
 ## Per-case retrieval
 
@@ -77,5 +77,5 @@ Each fresh consumer receives only the incoming task and generated handoff packet
 These results establish that indexing, retrieval evaluation, and task-specific context packing run end to end on reproducible local fixtures. They are not evidence of performance on a large or representative customer repository. The Jev row is a local hybrid fallback because the external scorer is intentionally disabled. Latency is a small SQLite-fixture measurement and is not comparable to production PostgreSQL/Neo4j latency.
 
 - Cases: 5; top-k: 5; profiles: lexical, hybrid, jev.
-- Benchmark run total: 213.95 ms across all cases and profiles.
+- Benchmark run total: 204.11 ms across all cases and profiles.
 - Total estimated retrieved source tokens: 840.

@@ -24,4 +24,4 @@ RUN mkdir -p .repo_cache
 EXPOSE 8000
 
 # Run with uvicorn; reload enabled for development
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "info"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

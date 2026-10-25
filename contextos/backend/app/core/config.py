@@ -7,6 +7,7 @@ All configuration comes from the .env file or environment variables.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import List
 
@@ -114,3 +115,8 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def is_test_runtime() -> bool:
+    """Only enable test-only behavior while a pytest test is actively running."""
+    return settings.APP_ENV == "test" and bool(os.getenv("PYTEST_CURRENT_TEST"))
